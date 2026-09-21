@@ -1,0 +1,16 @@
+services:
+  evidenceforge:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - evidenceforge-data:/app/data
+    environment:
+      EF_API_KEY: ${EF_API_KEY:-}
+      EF_BASE_URL: ${EF_BASE_URL:-https://api.openai.com/v1}
+      EF_MODEL: ${EF_MODEL:-your-model-name}
+      EF_TAVILY_API_KEY: ${EF_TAVILY_API_KEY:-}
+      EF_MAX_TOKENS: ${EF_MAX_TOKENS:-64000}
+    restart: unless-stopped
+volumes:
+  evidenceforge-data:

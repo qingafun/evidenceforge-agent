@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evidenceforge"
+version = "0.1.0"
+description = "An evidence-first research agent workbench with durable workflows and reproducible evaluation"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+  "fastapi>=0.115,<1", "uvicorn>=0.34,<1", "httpx>=0.28,<1",
+  "pydantic>=2.10,<3", "pydantic-settings>=2.7,<3",
+  "langgraph>=1.0,<2", "langgraph-checkpoint-sqlite>=3.0,<4",
+  "mcp>=1.10,<2"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<10", "ruff>=0.11,<1"]
+
+[project.scripts]
+evidenceforge = "evidenceforge.cli:main"
+evidenceforge-mcp = "evidenceforge.mcp_server:main"
+
+[tool.setuptools.packages.find]
+include = ["evidenceforge*", "evals*"]
+
+[tool.setuptools.package-data]
+evidenceforge = ["static/*", "corpus/*.md"]
+evals = ["*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore:Core Pydantic V1 functionality:UserWarning"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

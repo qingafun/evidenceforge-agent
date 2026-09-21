@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#152c2d">
+  <meta name="description" content="EvidenceForge 本地 API 文档，无外部脚本依赖。">
+  <title>API 文档 · EvidenceForge</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/api.js" defer></script>
+</head>
+<body class="api-docs">
+  <a href="#api-main" class="skip-link">跳转到 API 文档</a>
+  <header class="api-docs-header"><a class="brand" href="/" aria-label="返回 EvidenceForge 工作台"><span class="brand-mark">e<span>f</span></span><span>EvidenceForge<small>API REFERENCE</small></span></a><div class="api-docs-header-links"><a href="/openapi.json" target="_blank" rel="noopener noreferrer">OpenAPI JSON ↗</a><a href="/">返回工作台 <span aria-hidden="true">→</span></a></div></header>
+  <div class="api-docs-layout">
+    <aside class="api-docs-sidebar" aria-label="API 文档导航"><p class="eyebrow">REFERENCE</p><a class="api-overview-link" href="#api-overview">概览</a><nav id="api-nav" aria-label="端点分组"><p class="loading-message">正在读取端点…</p></nav><a class="api-overview-link" href="#api-schemas">数据结构</a><div class="api-sidebar-note">此页只展示接口定义。<br>无需联网加载脚本，<br>不会代你执行 API 请求。</div></aside>
+    <main id="api-main" tabindex="-1">
+      <section id="api-overview" class="api-docs-intro"><p class="eyebrow">BUILD WITH EVIDENCEFORGE</p><h1>你的 Agent，也可以被连接<span class="teal-period">.</span></h1><p class="page-description">研究任务、知识库与长期记忆，通过同一套 HTTP API 访问。文档直接读取当前服务的接口定义。</p><div class="api-meta-row"><span id="api-version" class="page-pill">正在连接…</span><code id="api-base-url" class="api-base-url"></code><span class="api-offline-badge">无外部依赖</span></div><div class="api-reference-note"><strong>使用说明</strong><p>请求与响应默认使用 JSON。带有 <code>{run_id}</code> 等占位符的路径需要填入实际 ID。研究流程在后台运行，事件接口以 SSE 返回过程记录；报告接口返回 Markdown 文件。</p></div></section>
+      <section class="api-endpoints-section" aria-labelledby="api-endpoints-title"><div class="api-section-title"><h2 id="api-endpoints-title">接口参考</h2><span id="api-endpoint-count" class="muted"></span></div><div class="api-filter-toolbar"><label class="sr-only" for="api-search">搜索 API 路径或说明</label><input id="api-search" type="search" placeholder="搜索路径、功能或数据结构…" autocomplete="off"><div id="api-method-filters" class="api-method-filters" role="group" aria-label="按请求方法筛选"><button type="button" data-method="all" aria-pressed="true">全部</button><button type="button" data-method="get" aria-pressed="false">GET</button><button type="button" data-method="post" aria-pressed="false">POST</button><button type="button" data-method="delete" aria-pressed="false">DELETE</button></div></div><div id="api-load-error" class="run-error" role="alert" hidden></div><div id="api-endpoints" class="api-endpoints"><p class="loading-message">正在读取本地 OpenAPI 定义…</p></div><p id="api-no-results" class="api-no-results" hidden>没有找到匹配的接口。试试不同的关键词或请求方法。</p></section>
+      <section id="api-schemas" class="api-schemas-section" aria-labelledby="api-schemas-title"><div class="api-section-title"><h2 id="api-schemas-title">数据结构</h2><span class="muted">展开查看字段、类型与限制</span></div><div id="api-schema-list" class="api-schema-list"></div></section>
+      <footer class="main-footer"><span>EvidenceForge <span class="footer-separator">/</span> 本地 API 文档</span><span>GENERATED FROM OPENAPI</span></footer>
+    </main>
+  </div>
+</body>
+</html>

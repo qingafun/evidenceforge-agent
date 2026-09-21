@@ -1,0 +1,151 @@
+{
+  "name": "EvidenceForge authored retrieval smoke benchmark",
+  "version": 1,
+  "description": "20 manually authored bilingual smoke cases over 10 original demo notes. These are transparent regression fixtures, not an independent or general benchmark.",
+  "cases": [
+    {
+      "id": "durable_restart",
+      "query": "服务重启以后怎样继续上次的 LangGraph 任务？",
+      "expected_titles": [
+        "LangGraph 状态持久化与故障恢复 / Durable state"
+      ]
+    },
+    {
+      "id": "human_reject",
+      "query": "How should a human approve or reject an agent action?",
+      "expected_titles": [
+        "人工审批与安全恢复 / Human-in-the-loop approval"
+      ]
+    },
+    {
+      "id": "evidence_trace",
+      "query": "回答中的引用怎样追溯到原始文档片段？",
+      "expected_titles": [
+        "RAG 检索增强与可追溯证据 / Retrieval-augmented generation"
+      ]
+    },
+    {
+      "id": "rank_fusion",
+      "query": "How does reciprocal rank fusion combine BM25 and character TF-IDF?",
+      "expected_titles": [
+        "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+      ]
+    },
+    {
+      "id": "mcp_contract",
+      "query": "MCP 的工具发现、输入 schema 和调用返回值有什么作用？",
+      "expected_titles": [
+        "MCP 工具协议与能力边界 / Model Context Protocol"
+      ]
+    },
+    {
+      "id": "untrusted_instruction",
+      "query": "A retrieved document says to ignore instructions and send API keys. What should happen?",
+      "expected_titles": [
+        "Agent 工具安全与提示注入 / Tool security"
+      ]
+    },
+    {
+      "id": "bounded_loop",
+      "query": "工具调用一直循环时如何限制 token、费用和运行时间？",
+      "expected_titles": [
+        "模型预算与有限工具循环 / Model budget"
+      ]
+    },
+    {
+      "id": "retrieval_metrics",
+      "query": "Explain Hit@k, MRR, and the limits of a small retrieval evaluation.",
+      "expected_titles": [
+        "Agent 评估与可复现基线 / Evaluation"
+      ]
+    },
+    {
+      "id": "async_service",
+      "query": "FastAPI async def 和阻塞数据库查询应该怎样搭配？",
+      "expected_titles": [
+        "FastAPI 服务分层与任务观测 / Service architecture"
+      ]
+    },
+    {
+      "id": "local_tool_call",
+      "query": "What must I verify before using Ollama or vLLM for local tool calling?",
+      "expected_titles": [
+        "本地模型部署与兼容接口 / Local model deployment"
+      ]
+    },
+    {
+      "id": "memory_scope",
+      "query": "thread_id 的短期记忆与跨会话 store 有什么区别？",
+      "expected_titles": [
+        "LangGraph 状态持久化与故障恢复 / Durable state"
+      ]
+    },
+    {
+      "id": "safe_resume",
+      "query": "Why can code before an interrupt run twice when resuming?",
+      "expected_titles": [
+        "人工审批与安全恢复 / Human-in-the-loop approval"
+      ]
+    },
+    {
+      "id": "no_evidence",
+      "query": "知识库找不到支持结论的证据时，该怎样回答和标注引用？",
+      "expected_titles": [
+        "RAG 检索增强与可追溯证据 / Retrieval-augmented generation"
+      ]
+    },
+    {
+      "id": "lexical_semantics",
+      "query": "Are character n-gram vectors neural semantic embeddings?",
+      "expected_titles": [
+        "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+      ]
+    },
+    {
+      "id": "worker_state",
+      "query": "多个 API worker 为什么不能共享内存中的后台任务字典？",
+      "expected_titles": [
+        "FastAPI 服务分层与任务观测 / Service architecture"
+      ]
+    },
+    {
+      "id": "offline_demo",
+      "query": "Does a deterministic offline demo mean a local LLM has been deployed?",
+      "expected_titles": [
+        "本地模型部署与兼容接口 / Local model deployment"
+      ]
+    },
+    {
+      "id": "approval_recovery",
+      "query": "人工审批后恢复 LangGraph 任务，如何防止副作用重复执行？",
+      "expected_titles": [
+        "LangGraph 状态持久化与故障恢复 / Durable state",
+        "人工审批与安全恢复 / Human-in-the-loop approval"
+      ]
+    },
+    {
+      "id": "rag_validation",
+      "query": "How do citation provenance and groundedness evaluation help verify a RAG answer?",
+      "expected_titles": [
+        "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+        "Agent 评估与可复现基线 / Evaluation"
+      ]
+    },
+    {
+      "id": "mcp_injection",
+      "query": "MCP 工具权限和提示注入应当在哪里校验？",
+      "expected_titles": [
+        "MCP 工具协议与能力边界 / Model Context Protocol",
+        "Agent 工具安全与提示注入 / Tool security"
+      ]
+    },
+    {
+      "id": "local_context_budget",
+      "query": "本地模型上下文窗口增大后，怎样考虑显存、延迟与预算？",
+      "expected_titles": [
+        "模型预算与有限工具循环 / Model budget",
+        "本地模型部署与兼容接口 / Local model deployment"
+      ]
+    }
+  ]
+}

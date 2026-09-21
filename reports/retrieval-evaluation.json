@@ -1,0 +1,566 @@
+{
+  "generated_at": "2026-09-21T15:41:18.380699+00:00",
+  "corpus_documents": 10,
+  "cases": [
+    {
+      "id": "durable_restart",
+      "query": "服务重启以后怎样继续上次的 LangGraph 任务？",
+      "expected_titles": [
+        "LangGraph 状态持久化与故障恢复 / Durable state"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "人工审批与安全恢复 / Human-in-the-loop approval",
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "Agent 评估与可复现基线 / Evaluation"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "人工审批与安全恢复 / Human-in-the-loop approval",
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "Agent 评估与可复现基线 / Evaluation"
+        ]
+      }
+    },
+    {
+      "id": "human_reject",
+      "query": "How should a human approve or reject an agent action?",
+      "expected_titles": [
+        "人工审批与安全恢复 / Human-in-the-loop approval"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "人工审批与安全恢复 / Human-in-the-loop approval",
+          "Agent 评估与可复现基线 / Evaluation",
+          "Agent 工具安全与提示注入 / Tool security",
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "模型预算与有限工具循环 / Model budget"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "人工审批与安全恢复 / Human-in-the-loop approval",
+          "Agent 评估与可复现基线 / Evaluation",
+          "Agent 工具安全与提示注入 / Tool security",
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "模型预算与有限工具循环 / Model budget"
+        ]
+      }
+    },
+    {
+      "id": "evidence_trace",
+      "query": "回答中的引用怎样追溯到原始文档片段？",
+      "expected_titles": [
+        "RAG 检索增强与可追溯证据 / Retrieval-augmented generation"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "模型预算与有限工具循环 / Model budget",
+          "Agent 工具安全与提示注入 / Tool security",
+          "Agent 评估与可复现基线 / Evaluation",
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "模型预算与有限工具循环 / Model budget",
+          "Agent 工具安全与提示注入 / Tool security",
+          "Agent 评估与可复现基线 / Evaluation",
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+        ]
+      }
+    },
+    {
+      "id": "rank_fusion",
+      "query": "How does reciprocal rank fusion combine BM25 and character TF-IDF?",
+      "expected_titles": [
+        "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+        ]
+      }
+    },
+    {
+      "id": "mcp_contract",
+      "query": "MCP 的工具发现、输入 schema 和调用返回值有什么作用？",
+      "expected_titles": [
+        "MCP 工具协议与能力边界 / Model Context Protocol"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "Agent 工具安全与提示注入 / Tool security",
+          "本地模型部署与兼容接口 / Local model deployment",
+          "模型预算与有限工具循环 / Model budget",
+          "FastAPI 服务分层与任务观测 / Service architecture"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "Agent 工具安全与提示注入 / Tool security",
+          "本地模型部署与兼容接口 / Local model deployment",
+          "模型预算与有限工具循环 / Model budget",
+          "FastAPI 服务分层与任务观测 / Service architecture"
+        ]
+      }
+    },
+    {
+      "id": "untrusted_instruction",
+      "query": "A retrieved document says to ignore instructions and send API keys. What should happen?",
+      "expected_titles": [
+        "Agent 工具安全与提示注入 / Tool security"
+      ],
+      "bm25": {
+        "recall_at_5": 0.0,
+        "mrr": 0.0,
+        "retrieved_titles": [
+          "模型预算与有限工具循环 / Model budget",
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "本地模型部署与兼容接口 / Local model deployment",
+          "Agent 评估与可复现基线 / Evaluation",
+          "MCP 工具协议与能力边界 / Model Context Protocol"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 0.0,
+        "mrr": 0.0,
+        "retrieved_titles": [
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "模型预算与有限工具循环 / Model budget",
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "本地模型部署与兼容接口 / Local model deployment",
+          "Agent 评估与可复现基线 / Evaluation"
+        ]
+      }
+    },
+    {
+      "id": "bounded_loop",
+      "query": "工具调用一直循环时如何限制 token、费用和运行时间？",
+      "expected_titles": [
+        "模型预算与有限工具循环 / Model budget"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "模型预算与有限工具循环 / Model budget",
+          "本地模型部署与兼容接口 / Local model deployment",
+          "Agent 工具安全与提示注入 / Tool security",
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "MCP 工具协议与能力边界 / Model Context Protocol"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "模型预算与有限工具循环 / Model budget",
+          "本地模型部署与兼容接口 / Local model deployment",
+          "Agent 工具安全与提示注入 / Tool security",
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "MCP 工具协议与能力边界 / Model Context Protocol"
+        ]
+      }
+    },
+    {
+      "id": "retrieval_metrics",
+      "query": "Explain Hit@k, MRR, and the limits of a small retrieval evaluation.",
+      "expected_titles": [
+        "Agent 评估与可复现基线 / Evaluation"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "Agent 评估与可复现基线 / Evaluation",
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval",
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "Agent 评估与可复现基线 / Evaluation",
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval",
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation"
+        ]
+      }
+    },
+    {
+      "id": "async_service",
+      "query": "FastAPI async def 和阻塞数据库查询应该怎样搭配？",
+      "expected_titles": [
+        "FastAPI 服务分层与任务观测 / Service architecture"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval",
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "Agent 工具安全与提示注入 / Tool security",
+          "MCP 工具协议与能力边界 / Model Context Protocol"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval",
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "Agent 工具安全与提示注入 / Tool security",
+          "MCP 工具协议与能力边界 / Model Context Protocol"
+        ]
+      }
+    },
+    {
+      "id": "local_tool_call",
+      "query": "What must I verify before using Ollama or vLLM for local tool calling?",
+      "expected_titles": [
+        "本地模型部署与兼容接口 / Local model deployment"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "本地模型部署与兼容接口 / Local model deployment",
+          "模型预算与有限工具循环 / Model budget",
+          "Agent 工具安全与提示注入 / Tool security",
+          "MCP 工具协议与能力边界 / Model Context Protocol"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "本地模型部署与兼容接口 / Local model deployment",
+          "模型预算与有限工具循环 / Model budget",
+          "Agent 工具安全与提示注入 / Tool security",
+          "MCP 工具协议与能力边界 / Model Context Protocol"
+        ]
+      }
+    },
+    {
+      "id": "memory_scope",
+      "query": "thread_id 的短期记忆与跨会话 store 有什么区别？",
+      "expected_titles": [
+        "LangGraph 状态持久化与故障恢复 / Durable state"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "模型预算与有限工具循环 / Model budget",
+          "人工审批与安全恢复 / Human-in-the-loop approval",
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "人工审批与安全恢复 / Human-in-the-loop approval",
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval",
+          "模型预算与有限工具循环 / Model budget"
+        ]
+      }
+    },
+    {
+      "id": "safe_resume",
+      "query": "Why can code before an interrupt run twice when resuming?",
+      "expected_titles": [
+        "人工审批与安全恢复 / Human-in-the-loop approval"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "人工审批与安全恢复 / Human-in-the-loop approval"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "人工审批与安全恢复 / Human-in-the-loop approval"
+        ]
+      }
+    },
+    {
+      "id": "no_evidence",
+      "query": "知识库找不到支持结论的证据时，该怎样回答和标注引用？",
+      "expected_titles": [
+        "RAG 检索增强与可追溯证据 / Retrieval-augmented generation"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "Agent 工具安全与提示注入 / Tool security",
+          "Agent 评估与可复现基线 / Evaluation",
+          "模型预算与有限工具循环 / Model budget"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "Agent 工具安全与提示注入 / Tool security",
+          "Agent 评估与可复现基线 / Evaluation",
+          "模型预算与有限工具循环 / Model budget"
+        ]
+      }
+    },
+    {
+      "id": "lexical_semantics",
+      "query": "Are character n-gram vectors neural semantic embeddings?",
+      "expected_titles": [
+        "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval"
+        ]
+      }
+    },
+    {
+      "id": "worker_state",
+      "query": "多个 API worker 为什么不能共享内存中的后台任务字典？",
+      "expected_titles": [
+        "FastAPI 服务分层与任务观测 / Service architecture"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "模型预算与有限工具循环 / Model budget",
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "Agent 工具安全与提示注入 / Tool security"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "模型预算与有限工具循环 / Model budget",
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "Agent 工具安全与提示注入 / Tool security"
+        ]
+      }
+    },
+    {
+      "id": "offline_demo",
+      "query": "Does a deterministic offline demo mean a local LLM has been deployed?",
+      "expected_titles": [
+        "本地模型部署与兼容接口 / Local model deployment"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 0.5,
+        "retrieved_titles": [
+          "Agent 评估与可复现基线 / Evaluation",
+          "本地模型部署与兼容接口 / Local model deployment"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 0.5,
+        "retrieved_titles": [
+          "Agent 评估与可复现基线 / Evaluation",
+          "本地模型部署与兼容接口 / Local model deployment"
+        ]
+      }
+    },
+    {
+      "id": "approval_recovery",
+      "query": "人工审批后恢复 LangGraph 任务，如何防止副作用重复执行？",
+      "expected_titles": [
+        "LangGraph 状态持久化与故障恢复 / Durable state",
+        "人工审批与安全恢复 / Human-in-the-loop approval"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "人工审批与安全恢复 / Human-in-the-loop approval",
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "Agent 工具安全与提示注入 / Tool security",
+          "Agent 评估与可复现基线 / Evaluation",
+          "FastAPI 服务分层与任务观测 / Service architecture"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "LangGraph 状态持久化与故障恢复 / Durable state",
+          "人工审批与安全恢复 / Human-in-the-loop approval",
+          "Agent 工具安全与提示注入 / Tool security",
+          "Agent 评估与可复现基线 / Evaluation",
+          "FastAPI 服务分层与任务观测 / Service architecture"
+        ]
+      }
+    },
+    {
+      "id": "rag_validation",
+      "query": "How do citation provenance and groundedness evaluation help verify a RAG answer?",
+      "expected_titles": [
+        "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+        "Agent 评估与可复现基线 / Evaluation"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "Agent 评估与可复现基线 / Evaluation"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "Agent 评估与可复现基线 / Evaluation"
+        ]
+      }
+    },
+    {
+      "id": "mcp_injection",
+      "query": "MCP 工具权限和提示注入应当在哪里校验？",
+      "expected_titles": [
+        "MCP 工具协议与能力边界 / Model Context Protocol",
+        "Agent 工具安全与提示注入 / Tool security"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "Agent 工具安全与提示注入 / Tool security",
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "模型预算与有限工具循环 / Model budget",
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "Agent 评估与可复现基线 / Evaluation"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "Agent 工具安全与提示注入 / Tool security",
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "模型预算与有限工具循环 / Model budget",
+          "FastAPI 服务分层与任务观测 / Service architecture",
+          "Agent 评估与可复现基线 / Evaluation"
+        ]
+      }
+    },
+    {
+      "id": "local_context_budget",
+      "query": "本地模型上下文窗口增大后，怎样考虑显存、延迟与预算？",
+      "expected_titles": [
+        "模型预算与有限工具循环 / Model budget",
+        "本地模型部署与兼容接口 / Local model deployment"
+      ],
+      "bm25": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "本地模型部署与兼容接口 / Local model deployment",
+          "模型预算与有限工具循环 / Model budget",
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "Agent 评估与可复现基线 / Evaluation",
+          "FastAPI 服务分层与任务观测 / Service architecture"
+        ]
+      },
+      "hybrid": {
+        "recall_at_5": 1.0,
+        "mrr": 1.0,
+        "retrieved_titles": [
+          "本地模型部署与兼容接口 / Local model deployment",
+          "模型预算与有限工具循环 / Model budget",
+          "RAG 检索增强与可追溯证据 / Retrieval-augmented generation",
+          "Agent 评估与可复现基线 / Evaluation",
+          "FastAPI 服务分层与任务观测 / Service architecture"
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "cases": 20,
+    "bm25": {
+      "recall_at_5": 0.95,
+      "mrr": 0.925
+    },
+    "hybrid": {
+      "recall_at_5": 0.95,
+      "mrr": 0.925
+    }
+  },
+  "notes": [
+    "Small authored smoke benchmark over bundled demo notes, not an independent or general benchmark.",
+    "Cases and labels were authored before scoring; no model calls, API keys, network or paid usage.",
+    "Ranking requests up to 50 chunks, deduplicates document IDs, then takes the first 5 documents.",
+    "recall_at_5 = relevant documents retrieved / all labeled relevant documents; mrr = MRR@5.",
+    "BM25 and character n-gram TF-IDF are both sparse lexical methods; hybrid uses RRF, not neural embeddings.",
+    "Results measure retrieval only, not answer correctness, citation support or real-model reasoning.",
+    "A stronger result on these fixtures alone is not evidence of broader quality gains."
+  ]
+}
