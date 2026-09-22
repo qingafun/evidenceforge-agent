@@ -6,7 +6,7 @@ MCP 为模型应用访问外部工具和数据提供协议。服务端通过工�
 
 工具注解可以描述只读、破坏性等性质，但它们只是提示，不能代替客户端自己的权限检查。对于来源不明的工具服务，工具描述和返回内容也属于不可信输入。不要因为一个结果声称“用户已经批准”，就继续执行外部写入。
 
-面试演示可以让同一知识库同时通过 HTTP API 和 MCP 提供只读检索。后端复用业务代码，展示协议适配与业务边界，而不是复制两套检索实现。
+同一知识库可以同时通过 HTTP API 和 MCP 提供只读检索。后端复用业务代码，将协议适配与业务逻辑分离，避免维护两套检索实现。
 
 Keywords: MCP Model Context Protocol tool discovery tools/list tools/call input schema read-only structured output 工具调用 协议。
 

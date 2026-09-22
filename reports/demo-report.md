@@ -36,7 +36,7 @@ BM25 根据词频、文档频率和长度归一化进行词法排序，适合精
 
 ### MCP 工具协议与能力边界 / Model Context Protocol
 
-MCP 为模型应用访问外部工具和数据提供协议。服务端通过工具描述与输入 schema 说明能力，客户端可以发现并调用工具。MCP 连接的是应用与能力，并不会自动赋予工具安全性、模型智能或访问权限。 工具应具有单一、可解释的用途，例如 search_knowledge、read_evidence。输入应接受结构化验证，输出保留可追踪的证据 ID。工具失败和协议失败需要区分，便于 Agent 决定是否修正参数、重试或者结束。 工具注解可以描述只读、破坏性等性质，但它们只是提示，不能代替客户端自己的权限检查。对于来源不明的工具服务，工具描述和返回内容也属于不可 [ev_40d6a79e81ed01b1112f370b]
+MCP 为模型应用访问外部工具和数据提供协议。服务端通过工具描述与输入 schema 说明能力，客户端可以发现并调用工具。MCP 连接的是应用与能力，并不会自动赋予工具安全性、模型智能或访问权限。 工具应具有单一、可解释的用途，例如 search_knowledge、read_evidence。输入应接受结构化验证，输出保留可追踪的证据 ID。工具失败和协议失败需要区分，便于 Agent 决定是否修正参数、重试或者结束。 工具注解可以描述只读、破坏性等性质，但它们只是提示，不能代替客户端自己的权限检查。对于来源不明的工具服务，工具描述和返回内容也属于不可 [ev_13f027d19eabf9f216441dd4]
 
 ## 验证与下一步
 
@@ -54,5 +54,5 @@ MCP 为模型应用访问外部工具和数据提供协议。服务端通过工�
 - [ev_4f639c0c444620d12adbf188] LangGraph 状态持久化与故障恢复 / Durable state — demo:01-langgraph-persistence.md
 - [ev_214c77714c94153129c2cf41] BM25、字符 TF-IDF 与 RRF / Hybrid lexical retrieval — demo:04-hybrid-retrieval.md
 - [ev_d45252e461d2ad55a414fbf0] FastAPI 服务分层与任务观测 / Service architecture — demo:09-fastapi-architecture.md
-- [ev_40d6a79e81ed01b1112f370b] MCP 工具协议与能力边界 / Model Context Protocol — demo:05-mcp-tools.md
+- [ev_13f027d19eabf9f216441dd4] MCP 工具协议与能力边界 / Model Context Protocol — demo:05-mcp-tools.md
 - [ev_fe158209f82e20cc2732da08] 模型预算与有限工具循环 / Model budget — demo:07-model-budget.md

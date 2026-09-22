@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-21T15:41:18.380699+00:00",
+  "generated_at": "2026-09-22T03:09:32.198231+00:00",
   "corpus_documents": 10,
   "cases": [
     {
@@ -152,8 +152,8 @@
           "模型预算与有限工具循环 / Model budget",
           "FastAPI 服务分层与任务观测 / Service architecture",
           "本地模型部署与兼容接口 / Local model deployment",
-          "Agent 评估与可复现基线 / Evaluation",
-          "MCP 工具协议与能力边界 / Model Context Protocol"
+          "MCP 工具协议与能力边界 / Model Context Protocol",
+          "Agent 评估与可复现基线 / Evaluation"
         ]
       },
       "hybrid": {
@@ -164,7 +164,7 @@
           "模型预算与有限工具循环 / Model budget",
           "FastAPI 服务分层与任务观测 / Service architecture",
           "本地模型部署与兼容接口 / Local model deployment",
-          "Agent 评估与可复现基线 / Evaluation"
+          "MCP 工具协议与能力边界 / Model Context Protocol"
         ]
       }
     },

@@ -10,3 +10,4 @@ __pycache__
 tests
 verification
 node_modules
+.local-only
