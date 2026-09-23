@@ -151,8 +151,10 @@ class ToolRegistry:
             key = key.get_secret_value()
         try:
             with httpx.Client(timeout=float(self.settings.request_timeout), follow_redirects=False) as client:
-                response = client.post("https://api.tavily.com/search", json={
-                    "api_key": key, "query": query, "max_results": 5,
+                response = client.post("https://api.tavily.com/search", headers={
+                    "Authorization": f"Bearer {key}",
+                }, json={
+                    "query": query, "max_results": 5,
                     "search_depth": "basic", "include_raw_content": False,
                     "include_answer": False,
                 })

@@ -86,6 +86,8 @@ def test_tavily_normalizes_bounds_and_keeps_sources_readable(monkeypatch):
     def handler(request):
         seen.append(request)
         assert str(request.url) == "https://api.tavily.com/search"
+        assert request.headers["Authorization"] == "Bearer test"
+        assert "api_key" not in request.content.decode("utf-8")
         return httpx.Response(200, json={"results": [
             {"url": "https://example.org/reference", "title": "A reference", "content": "x" * 7000, "score": 0.9},
             {"url": "file:///secret", "title": "Bad", "content": "bad"},

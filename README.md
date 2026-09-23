@@ -82,7 +82,7 @@ EF_BASE_URL=https://服务商的兼容接口/v1
 EF_MODEL=支持工具调用与JSON输出的模型名
 ```
 
-重启服务，在页面切换到“模型驱动”。兼容接口必须支持 `/chat/completions`、function tools 与 JSON object response format。可选 `EF_TAVILY_API_KEY` 启用网页搜索；未配置时仅检索本地资料。也可通过兼容接口连接已安装的本地模型。
+重启服务，在页面切换到“模型驱动”。兼容接口必须支持 `/chat/completions`、function tools 与 JSON object response format。可选 `EF_TAVILY_API_KEY` 启用网页搜索；未配置时仅检索本地资料。密钥获取和验证步骤见 [环境配置](docs/ENVIRONMENT.md)。也可通过兼容接口连接已安装的本地模型。
 
 密钥仅在后端读取；`.env` 和本地数据已加入 `.gitignore`。研究输入、相关资料和记忆会发给你选择的模型服务。配置详情、预算口径、MCP 接入、常见报错见 [ENVIRONMENT.md](docs/ENVIRONMENT.md)。
 

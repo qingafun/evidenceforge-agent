@@ -48,6 +48,8 @@ EF_REQUEST_TIMEOUT=60
 
 只有设置 `EF_TAVILY_API_KEY` 才启用 `search_web`。否则模型基于本地知识库工作，不会假装已搜索互联网。输入任务、导入资料和相关记忆会被发送给你配置的模型服务；网页搜索查询会发送给 Tavily。
 
+联网搜索配置：在 [Tavily 平台](https://app.tavily.com/)登录并复制 API Key；在项目根目录的 `.env` 中填写 `EF_TAVILY_API_KEY=你的密钥`，保留已配置的模型 API 项，然后重启服务。执行 `python -m evidenceforge.cli doctor` 应显示 `web_search_configured: true`；`/api/health` 的 `tools` 也应包含 `search_web`。页面要选择“模型驱动”，并在问题中说明需要联网检索。模型决定具体调用哪些工具；运行轨迹中的 `search_web` 事件才表示实际进行了网页搜索。Tavily 密钥通过 `Authorization: Bearer` 请求头发送。
+
 Token 预算为单次研究任务的累计预算，包含失败请求的保守估算。兼容服务可能返回不同 usage 口径，实际账单以服务商为准。排错期间可减少 max_steps、缩短文档或选择成本较低的模型，先完成一个任务再批量评测。
 
 `EF_MAX_OUTPUT_TOKENS` 是普通模型请求的输出额度，默认 4096；报告写作至少申请 8192。服务端还会按剩余任务预算收紧实际请求额度。检测到长度截断时最多额外重写一次，在剩余预算内提高额度；持续截断会使任务失败，不能把半截文字当作完成报告。推理模型可能把部分输出额度用于内部推理，正文短不代表本次输出 Token 消耗低。

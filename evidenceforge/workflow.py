@@ -219,8 +219,10 @@ class Engine:
                     collect(tool("search_knowledge", {"query": query, "limit": 4}), found)
             else:
                 messages = [{"role": "system", "content": SYSTEM + "\nRole: Researcher. Use tools to gather evidence. "
-                            "Choose search queries yourself, inspect sources and stop when sufficient. At least one search is required."},
-                            {"role": "user", "content": json.dumps({"plan": state["plan"],
+                            "Choose search queries yourself, inspect sources and stop when sufficient. At least one search is required. "
+                            "When search_web is available, use it if the user explicitly asks for web information "
+                            "or the local evidence cannot answer the question. Do not claim web verification without a web tool result."},
+                            {"role": "user", "content": json.dumps({"question": state["question"], "plan": state["plan"],
                               "human_feedback": state.get("approval", {}).get("feedback", ""),
                               "preferences": state.get("memories", []), "evidence": compact_evidence(list(found.values()))}, ensure_ascii=False)}]
                 while metrics["tool_calls"] < state["max_steps"]:
