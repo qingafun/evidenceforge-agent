@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     model: str = "your-model-name"
     tavily_api_key: str = ""
     max_tokens: int = Field(default=64000, ge=1000, le=200000)
+    max_output_tokens: int = Field(default=4096, ge=256, le=32768)
     request_timeout: float = Field(default=60, ge=1, le=180)
 
     @property

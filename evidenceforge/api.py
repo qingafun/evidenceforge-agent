@@ -178,8 +178,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run = get_run(run_id)
         if not run["state"].get("report"):
             raise HTTPException(409, "报告尚未生成")
-        return Response(run["state"]["report"], media_type="text/markdown; charset=utf-8",
-                        headers={"Content-Disposition": f'attachment; filename="evidenceforge-{run_id[:8]}.md"'})
+        draft = run["state"].get("report_draft") or run["state"].get("review", {}).get("passed") is False
+        content = run["state"]["report"]
+        if draft and "未通过验收的草稿" not in content:
+            content = "> 未通过验收的草稿：内容尚未通过全部质量检查。\n\n" + content
+        suffix = "-draft" if draft else ""
+        return Response(content, media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="evidenceforge-{run_id[:8]}{suffix}.md"'})
 
     @app.get("/api/documents")
     def documents():

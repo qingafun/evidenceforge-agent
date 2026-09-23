@@ -1,4 +1,4 @@
-# EvidenceForge · 技术调研 Agent 工作台
+# EvidenceForge · 研究 Agent 工作台
 
 [![CI](https://github.com/qingafun/evidenceforge-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/qingafun/evidenceforge-agent/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12-3776AB)
@@ -6,11 +6,11 @@
 
 **从研究问题到可追溯报告：规划、检索、工具调用、人工审批、审查与恢复，在一个本地工作台完成。**
 
-适合技术选型、研发方案研究和个人资料整理。默认无 API Key 即可启动；配置兼容模型接口后，Researcher 可自主选择工具、生成检索参数并决定何时结束。
+支持资料问答、关系对照、方案比较与技术研究。默认无 API Key 即可启动；配置兼容模型接口后，Researcher 可自主选择工具、生成检索参数并决定何时结束。内置资料是 Agent 技术笔记，其他主题需要导入相关资料，或配置网页搜索。
 
 ![EvidenceForge 工作台](docs/assets/workspace.png)
 
-> 离线演示是规则驱动的流程与资料摘录，明确标记为 demo，不冒充大模型推理。真实模型调用路径有 HTTP Mock 测试，当前版本没有付费模型质量实测或生产运行指标。
+> 离线演示按规则检索和摘录已有资料，不调用模型，也不会搜索互联网。模型调用路径有 HTTP Mock 测试；具体实测范围见 [验证记录](docs/VALIDATION.md)，不据此宣称通用回答质量。
 
 ## 为什么做这个项目
 
@@ -27,14 +27,20 @@
 | 工具 | 知识检索、来源读取、受限 AST 计算器、偏好检索；可选 Tavily 网页搜索 |
 | 人工审批 | 计划审阅、反馈、批准/拒绝；LangGraph interrupt + SQLite，重启后继续 |
 | 状态与记忆 | 持久任务状态、节点检查点、可查看/删除的偏好；可选记住研究主题 |
-| 可靠性 | 参数 schema、限次重试、超时、Token 预算预留、取消、失败恢复 |
+| 可靠性 | 参数 schema、限次重试、超时、Token 预算预留、输出截断检测、取消、失败恢复 |
 | 可观测性 | SSE 实时事件、工具输入输出、耗时、调用次数、真实/估算 Token 用量 |
-| 引用审查 | 引用 ID 校验、证据快照；真实模型额外执行 Critic 审查 |
+| 答案验收 | 按问题选格式、过滤无关证据、区分未核验与证据不足；引用与完整性必须通过，失败保留草稿 |
 | MCP | 官方 Python SDK stdio server：3 个只读工具 + 1 个资源；真实协议握手测试 |
 | 产品界面 | 中文响应式工作台、知识库/记忆 CRUD、报告 Markdown 导出、评测页面、离线 API 文档 |
 | 交付 | 精确依赖版本、启动脚本、Docker 配置、自动化测试与跨平台 CI |
 
 **边界明确**：角色使用同一模型服务，不是分布式多智能体；稀疏 TF-IDF 不是神经语义 embedding；引用可解析不代表事实正确。项目聚焦 Agent 应用工程，不涉及训练、微调或强化学习。
+
+## 如何得到切题的答案
+
+报告格式随问题变化：对应关系优先给对照表，比较问题给比较维度，操作问题给步骤，说明问题直接解释。对已有相关资料但尚未独立核验的内容，先回答并标注“待核验”；只有证据确实不足时，才说明无法覆盖的部分和补充资料的办法。用户填写的来源名称本身不构成官方认证。
+
+检索命中后还会筛选主题相关性。最终验收检查引用、格式与答案完整性；输出截断触发预算内的一次扩大额度重试，漏答或无关材料触发一次修订。持续截断直接报错；验收仍未通过的报告保留为草稿，任务显示“验收未通过”。验收通过说明这些检查已通过，不保证每条事实都正确。
 
 ## 快速启动
 
@@ -118,6 +124,7 @@ ruff check evidenceforge tests evals
 evidenceforge/
   api.py             # HTTP、SSE、生命周期与输入边界
   workflow.py        # LangGraph + 局部自主工具循环
+  quality.py         # 问题格式、证据相关性与答案完整性
   providers.py       # 兼容模型接口、重试与预算
   tools.py           # Schema 工具注册表与安全计算
   knowledge.py       # 文档、原文分块、混合检索

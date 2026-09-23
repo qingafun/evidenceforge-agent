@@ -8,8 +8,9 @@
     queued: "排队中", running: "研究中", awaiting_approval: "等待审批",
     completed: "已完成", failed: "运行失败", cancelled: "已终止",
   };
+  const answerLabels = { answered: "已有依据", unverified: "待核验", insufficient_evidence: "证据不足" };
   const nodeLabels = {
-    plan: "规划 Agent", approval: "人工审批", research: "研究 Agent",
+    plan: "规划 Agent", approval: "人工审批", research: "研究 Agent", curate: "证据筛选",
     write: "撰写 Agent", review: "审查 Agent", revise: "修订", finalize: "整理报告", system: "系统",
   };
   const views = { workspace: "研究工作台", knowledge: "知识库", memory: "长期记忆", evaluations: "评测中心" };
@@ -232,6 +233,10 @@
     return run && ["queued", "running"].includes(run.status);
   }
 
+  function isDraft(run = state.run) {
+    return Boolean(run?.state?.report) && (run.state.report_draft === true || run.state.review?.passed === false);
+  }
+
   function scheduleRefresh() {
     if (state.refreshTimer) return;
     state.refreshTimer = setTimeout(() => {
@@ -321,6 +326,8 @@
       if (oldStatus !== run.status && run.status === "completed") {
         toast("研究报告已生成，可以查看证据或导出 Markdown。");
         if (run.state?.remember) loadMemory();
+      } else if (oldStatus !== run.status && run.status === "failed" && isDraft(run)) {
+        toast("报告未通过验收，草稿已保留。请查看质量审查中的具体问题。", true);
       }
     } catch (error) {
       if (state.run?.id === runId) $("trace-live").textContent = "连接中断，正在重试";
@@ -399,8 +406,10 @@
     const metrics = data.metrics || {};
     const report = typeof data.report === "string" ? data.report : "";
     const status = run?.status;
+    const draft = isDraft(run);
+    const answerStatus = data.answer_status || data.review?.answer_status;
     $("run-status").className = `status-badge ${Object.hasOwn(labels, status) ? status : "neutral"}`;
-    $("run-status").textContent = labels[status] || "等待开始";
+    $("run-status").textContent = status === "failed" && draft ? "验收未通过" : labels[status] || "等待开始";
     $("run-question").textContent = run?.question || "尚未创建研究任务";
     $("metric-evidence").textContent = run ? number(evidence.length) : "—";
     $("metric-tools").textContent = run ? number(metrics.tool_calls ?? 0) : "—";
@@ -410,9 +419,19 @@
     if (run) $("metric-time").append(el("small", "", "秒"));
     $("detail-mode").textContent = run ? (run.mode === "live" ? "模型驱动" : "离线 · 规则驱动") : "—";
     $("detail-tokens").textContent = run ? number((metrics.prompt_tokens || 0) + (metrics.completion_tokens || 0)) + (metrics.estimated_usage ? "（估算）" : "") : "—";
-    $("detail-review").textContent = data.review ? (data.review.passed ? "通过引用检查" : "存在待解决问题") : "尚未开始";
-    if (data.review?.semantic_review && data.review.passed) $("detail-review").textContent = "引用与模型审查通过";
+    $("detail-answer").textContent = answerLabels[answerStatus] || "尚未形成答案";
+    $("detail-answer").title = answerStatus === "unverified" ? "已按相关资料给出答案，但来源或结论尚未独立核验。" : answerStatus === "answered" ? "答案有引用依据，仍应结合原文判断事实是否正确。" : "";
+    const hasQualityChecks = typeof data.review?.completeness_passed === "boolean";
+    $("detail-review").textContent = data.review ? (data.review.passed ? (hasQualityChecks ? "全部验收通过" : "原有审查通过") : "存在待解决问题") : "尚未开始";
     $("detail-review").title = data.review?.note || "";
+    $("quality-checks").replaceChildren();
+    const checks = [["completeness_passed", "答案完整性"], ["relevance_passed", "证据相关性"], ["format_passed", "输出格式"], ["truncation_passed", "输出完整结束"], ["support_passed", "事实支持"]];
+    checks.forEach(([key, label]) => {
+      if (typeof data.review?.[key] !== "boolean") return;
+      const passed = data.review[key];
+      $("quality-checks").append(el("span", `quality-check ${passed ? "passed" : "failed"}`, `${passed ? "✓" : "!"} ${label}${passed ? "通过" : "未通过"}`));
+    });
+    $("quality-checks").hidden = !$("quality-checks").childElementCount;
     $("review-issues").hidden = !array(data.review?.issues).length;
     $("review-issues").replaceChildren();
     if (array(data.review?.issues).length) {
@@ -428,14 +447,26 @@
     $("run-error").hidden = !run?.error;
     $("run-error").textContent = run?.error || "";
     const exportButton = $("export-report");
+    exportButton.replaceChildren(icon("download"), document.createTextNode(draft ? "导出草稿" : "导出报告"));
     exportButton.classList.toggle("disabled", !report);
     exportButton.setAttribute("aria-disabled", String(!report));
     exportButton.tabIndex = report ? 0 : -1;
     if (report) {
       exportButton.href = `/api/runs/${encodeURIComponent(run.id)}/report`;
-      exportButton.download = `evidenceforge-${run.id.slice(0, 8)}.md`;
+      exportButton.download = `evidenceforge-${run.id.slice(0, 8)}${draft ? "-draft" : ""}.md`;
     } else exportButton.removeAttribute("href");
     $("copy-report").disabled = !report;
+    $("copy-report").setAttribute("aria-label", draft ? "复制 Markdown 草稿" : "复制 Markdown 报告");
+    const notice = $("report-notice");
+    notice.replaceChildren();
+    notice.hidden = !report || (!draft && !["unverified", "insufficient_evidence"].includes(answerStatus));
+    notice.className = `report-notice${draft ? " draft" : ""}`;
+    if (draft) {
+      const rejected = data.review?.passed === false || status === "failed";
+      notice.append(el("strong", "", rejected ? "未通过验收的草稿" : "等待验收的草稿"), el("p", "", rejected ? "这份内容仍有未解决的问题，不能视为完整答案。具体原因见质量审查。" : "答案正在审查，验收通过后才会标记为完成。"));
+    }
+    else if (answerStatus === "unverified") notice.append(el("strong", "", "答案已整理，来源待核验"), el("p", "", "以下内容依据当前相关资料整理；尚未独立核验不等于没有可供参考的答案。"));
+    else if (answerStatus === "insufficient_evidence") notice.append(el("strong", "", "相关证据不足"), el("p", "", "现有资料不足以回答问题。请按报告中的缺口补充相关资料后重新研究。"));
     renderWorkflow();
     renderPlan(data.plan);
     renderEvidence(evidence);
@@ -582,16 +613,20 @@
 
   /* Minimal Markdown parser: generated DOM only, no HTML or executable URLs. */
   function appendInline(parent, text, citations = new Set()) {
-    const pattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^\s)]+\)|\[[A-Za-z0-9_-]+\])/g;
+    // Escapes must win before formatting so imported text stays literal.
+    const escapedPunctuation = /\\([!-/:-@\[-`{-~])/g;
+    const unescape = (value) => value.replace(escapedPunctuation, "$1");
+    const pattern = /(\\[!-/:-@\[-`{-~]|`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^\s)]+\)|\[[A-Za-z0-9_-]+\])/g;
     let last = 0;
     for (const match of String(text).matchAll(pattern)) {
       parent.append(document.createTextNode(text.slice(last, match.index)));
       const token = match[0];
-      if (token.startsWith("`")) parent.append(el("code", "", token.slice(1, -1)));
-      else if (token.startsWith("**")) parent.append(el("strong", "", token.slice(2, -2)));
+      if (token.startsWith("\\")) parent.append(document.createTextNode(token.slice(1)));
+      else if (token.startsWith("`")) parent.append(el("code", "", token.slice(1, -1)));
+      else if (token.startsWith("**")) parent.append(el("strong", "", unescape(token.slice(2, -2))));
       else if (token.includes("](")) {
         const split = token.indexOf("](");
-        parent.append(externalLink(token.slice(1, split), token.slice(split + 2, -1)));
+        parent.append(externalLink(unescape(token.slice(1, split)), token.slice(split + 2, -1)));
       } else if (citations.has(token.slice(1, -1))) {
         const id = token.slice(1, -1);
         const button = el("button", "citation-button", token);
@@ -610,7 +645,21 @@
     const lines = String(markdown).replace(/\r\n?/g, "\n").split("\n");
     let index = 0;
     const isTableDivider = (line) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
-    const tableCells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+    const tableCells = (line) => {
+      const source = line.trim();
+      const cells = [""];
+      for (let index = 0; index < source.length; index++) {
+        const char = source[index];
+        if (char === "\\" && index + 1 < source.length) {
+          // Preserve the escape for inline rendering; an escaped pipe is content.
+          cells[cells.length - 1] += char + source[++index];
+        } else if (char === "|") cells.push("");
+        else cells[cells.length - 1] += char;
+      }
+      if (source.startsWith("|")) cells.shift();
+      if (cells.length > 1 && cells[cells.length - 1] === "" && source.endsWith("|")) cells.pop();
+      return cells.map((cell) => cell.trim());
+    };
     const special = (line) => !line.trim() || /^\s*(```|~~~|#{1,6}\s|>\s?|[-*+]\s|\d+[.)]\s|([-*_])\2{2,}\s*$)/.test(line);
     while (index < lines.length) {
       const line = lines[index];
@@ -848,7 +897,7 @@
     $("copy-report").addEventListener("click", async () => {
       const report = state.run?.state?.report;
       if (!report) return;
-      try { await navigator.clipboard.writeText(report); toast("Markdown 报告已复制。"); }
+      try { await navigator.clipboard.writeText(report); toast(isDraft() ? "Markdown 草稿已复制。" : "Markdown 报告已复制。"); }
       catch { toast("浏览器未允许写入剪贴板，请使用“导出报告”保存。", true); }
     });
     $("document-form").addEventListener("submit", addDocument);

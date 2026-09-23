@@ -106,6 +106,22 @@ def test_waiting_approval_survives_new_app_instance(settings):
         assert len([event for event in trace if event["node"] == "plan" and event["kind"] == "start"]) == 1
 
 
+def test_insufficient_evidence_is_failed_and_export_is_labeled_draft(client):
+    response = client.post("/api/runs", json={"question": "搜索原神中的国家与现实国家的对应关系",
+                                            "mode": "demo", "require_approval": False})
+    assert response.status_code == 201
+    run_id = response.json()["id"]
+    result = client.get(f"/api/runs/{run_id}").json()
+    assert result["status"] == "failed"
+    assert result["state"]["answer_status"] == "insufficient_evidence"
+    assert result["state"]["review"]["completeness_passed"] is False
+    report = client.get(f"/api/runs/{run_id}/report")
+    assert report.status_code == 200
+    assert "-draft.md" in report.headers["content-disposition"]
+    assert "未通过验收的草稿" in report.text
+    assert "LangGraph" not in report.text
+
+
 def test_restart_marks_running_task_failed_and_resume_completes(settings):
     initial = create_app(settings)
     run = initial.state.store.create_run("研究 LangGraph checkpoint", "demo",

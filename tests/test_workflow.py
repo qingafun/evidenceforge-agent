@@ -4,12 +4,18 @@ import json
 
 import httpx
 import pytest
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.graph import END, START, StateGraph
 
 from evidenceforge.config import Settings
 from evidenceforge.knowledge import KnowledgeBase
 from evidenceforge.providers import ModelClient
 from evidenceforge.store import Store
-from evidenceforge.workflow import Engine, citation_review
+from evidenceforge.workflow import Engine, RunState, citation_review
+
+
+PASS_REVIEW = {"passed": True, "completeness_passed": True, "relevance_passed": True,
+               "support_passed": True, "issues": [], "warnings": []}
 
 
 @pytest.fixture
@@ -46,7 +52,7 @@ def test_demo_plan_approval_report_memory_and_trace(components):
     assert "离线演示" in finished["state"]["report"]
     assert finished["state"]["approval"]["feedback"] == "优先本地部署"
     assert finished["state"]["metrics"]["llm_calls"] == 0
-    assert finished["state"]["metrics"]["tool_calls"] == 3
+    assert finished["state"]["metrics"]["tool_calls"] == 1
     assert len(store.list_memories()) == 1
     trace = store.events(run["id"])
     assert any(item["kind"] == "tool" for item in trace)
@@ -114,8 +120,10 @@ def test_empty_knowledge_abstains_and_revision_is_bounded(components):
     run = create_run(store, require_approval=False, max_steps=2)
     engine.execute(run["id"])
     record = store.get_run(run["id"])
-    assert record["status"] == "completed"
+    assert record["status"] == "failed"
     assert not record["state"]["review"]["passed"]
+    assert record["state"]["answer_status"] == "insufficient_evidence"
+    assert record["state"]["report_draft"]
     assert record["state"]["revision"] == 1
     assert "没有找到相关证据" in record["state"]["report"]
     assert record["state"]["metrics"]["tool_calls"] == 2
@@ -161,9 +169,12 @@ def test_live_autonomous_tool_loop_with_mock_http_provider(components, monkeypat
             else:
                 message["content"] = "Evidence is sufficient."
         elif "Role: Analyst" in role:
-            message["content"] = f"# Decision\n\nPersist approval state locally. [{selected_id}]"
+            message["content"] = ("# Comparison\n\n| Option | Evidence |\n| --- | --- |\n"
+                                  f"| Local state | Persist approval state locally. [{selected_id}] |")
+        elif "Role: Evidence selector" in role:
+            message["content"] = json.dumps({"relevant_ids": [selected_id]})
         elif "Role: Critic" in role:
-            message["content"] = '{"passed":true,"issues":[]}'
+            message["content"] = json.dumps(PASS_REVIEW)
         else:
             pytest.fail("Unexpected model role")
         return httpx.Response(200, json={"choices": [{"message": message}],
@@ -180,12 +191,12 @@ def test_live_autonomous_tool_loop_with_mock_http_provider(components, monkeypat
     assert record["status"] == "completed", record.get("error")
     assert record["state"]["review"]["passed"]
     assert record["state"]["metrics"]["tool_calls"] == 3
-    assert record["state"]["metrics"]["llm_calls"] == 6
-    assert record["state"]["metrics"]["prompt_tokens"] == 240
-    assert record["state"]["metrics"]["completion_tokens"] == 120
+    assert record["state"]["metrics"]["llm_calls"] == 7
+    assert record["state"]["metrics"]["prompt_tokens"] == 280
+    assert record["state"]["metrics"]["completion_tokens"] == 140
     tools = [event["data"]["tool"] for event in store.events(run["id"]) if event["kind"] == "tool"]
     assert tools == ["search_knowledge", "calculator", "read_source"]
-    assert len(requests) == 6
+    assert len(requests) == 7
     assert "PRIVATE_REASONING" not in json.dumps(store.events(run["id"]))
     assert "PRIVATE_REASONING" not in json.dumps(record)
 
@@ -213,8 +224,10 @@ def test_failed_writer_resumes_from_checkpoint_without_replaying_research(compon
             if len(writer_attempts) == 1:
                 return httpx.Response(400, text="PRIVATE_PROVIDER_ERROR_BODY")
             message["content"] = f"Checkpoint state can be restored. [{selected_id}]"
+        elif "Role: Evidence selector" in role:
+            message["content"] = json.dumps({"relevant_ids": [selected_id]})
         elif "Role: Critic" in role:
-            message["content"] = '{"passed":true,"issues":[]}'
+            message["content"] = json.dumps(PASS_REVIEW)
         return httpx.Response(200, json={"choices": [{"message": message}],
                                         "usage": {"prompt_tokens": 40, "completion_tokens": 20}})
 
@@ -234,9 +247,171 @@ def test_failed_writer_resumes_from_checkpoint_without_replaying_research(compon
     restored = store.get_run(run["id"])
     assert restored["status"] == "completed", restored.get("error")
     assert restored["error"] is None
-    assert restored["state"]["metrics"]["llm_calls"] == 6
+    assert restored["state"]["metrics"]["llm_calls"] == 7
     assert restored["state"]["metrics"]["tool_calls"] == 1
     trace = store.events(run["id"])
     assert len([event for event in trace if event["node"] == "research" and event["kind"] == "start"]) == 1
     assert len([event for event in trace if event["kind"] == "tool"]) == 1
     assert "PRIVATE_PROVIDER_ERROR_BODY" not in json.dumps(trace)
+
+
+GENSHIN_QUESTION = "搜索原神中的国家与现实国家的对应关系"
+# Deliberately unverified fixture claims; the test checks coverage/attribution, not game lore.
+GENSHIN_SAMPLE = "蒙德:德国等欧洲文化\n\n璃月:中国文化\n\n稻妻:日本文化"
+
+
+def test_demo_mapping_answers_from_relevant_import_and_excludes_technical_notes(components):
+    _, store, knowledge, engine = components
+    knowledge.add_document("原神中的国家与现实国家的对应关系", GENSHIN_SAMPLE, "用户导入，未核验")
+    knowledge.add_document("研究关系与来源验证", "原型模型研究：比较国家数据搜索来源的 Agent 技术方案。", "fixture:unrelated")
+    run = store.create_run(GENSHIN_QUESTION, "demo", {"require_approval": False, "max_steps": 4, "remember": False})
+    engine.execute(run["id"])
+    result = store.get_run(run["id"])
+    assert result["status"] == "completed", result.get("error")
+    state = result["state"]
+    assert state["plan"]["questions"] == [GENSHIN_QUESTION]
+    assert state["answer_contract"]["task_type"] == "mapping"
+    assert state["answer_status"] == "unverified"
+    assert not state["report_draft"]
+    assert state["review"]["completeness_passed"]
+    for name in ("蒙德", "璃月", "稻妻"):
+        assert f"| {name} |" in state["report"]
+    assert "未核验" in state["report"]
+    assert "fixture:unrelated" not in state["report"]
+    assert "fixture:persistence" not in state["report"]
+    assert all("原神" in e["title"] for e in state["evidence"])
+
+
+def test_demo_unknown_topic_does_not_fall_back_to_agent_boilerplate(components):
+    _, store, _, engine = components
+    run = store.create_run(GENSHIN_QUESTION, "demo", {"require_approval": False, "max_steps": 4, "remember": True})
+    engine.execute(run["id"])
+    record = store.get_run(run["id"])
+    assert record["status"] == "failed"
+    assert record["state"]["answer_status"] == "insufficient_evidence"
+    assert not record["state"]["review"]["completeness_passed"]
+    assert not record["state"]["evidence"]
+    assert "LangGraph" not in record["state"]["report"]
+    assert not store.list_memories()
+
+
+@pytest.mark.parametrize("pending_node", ["write", "review", "finalize"])
+def test_pre_upgrade_checkpoint_is_curated_before_answering(components, pending_node):
+    settings, store, knowledge, engine = components
+    run = create_run(store, require_approval=False)
+    evidence = knowledge.search("LangGraph")
+    legacy = StateGraph(RunState)
+    legacy.add_node("research", lambda _: {"evidence": evidence, "revision": 0,
+                    "plan": {"objective": run["question"], "questions": ["LangGraph"], "strategy": "search"},
+                    "report": "旧版未验收报告"})
+
+    def interrupted(_):
+        raise RuntimeError("Simulated pre-upgrade interruption")
+
+    legacy.add_node(pending_node, interrupted)
+    legacy.add_edge(START, "research")
+    legacy.add_edge("research", pending_node)
+    legacy.add_edge(pending_node, END)
+    config = {"configurable": {"thread_id": run["id"]}}
+    with SqliteSaver.from_conn_string(str(settings.data_dir / "checkpoints.sqlite")) as saver:
+        graph = legacy.compile(checkpointer=saver)
+        with pytest.raises(RuntimeError, match="pre-upgrade"):
+            graph.invoke(run["state"], config)
+        old_state = graph.get_state(config).values
+        assert "answer_contract" not in old_state
+        store.update_run(run["id"], status="failed", state=old_state)
+    engine.execute(run["id"], resume=True)
+    result = store.get_run(run["id"])
+    assert result["status"] == "completed", result.get("error")
+    assert result["state"]["review"]["completeness_passed"]
+    assert result["state"]["answer_contract"]["task_type"] == "comparison"
+    assert "旧版未验收报告" not in result["state"]["report"]
+    assert result["state"]["metrics"]["tool_calls"] == 0
+
+
+@pytest.mark.parametrize("failure", ["missing_row", "cut_off", "abstain", "critic_blocking_issue",
+                                     "missing_critic_checks", "null_issues", "null_warnings", "provider_cutoff"])
+def test_live_answer_quality_is_mandatory_even_when_critic_says_passed(components, monkeypatch, failure):
+    settings, store, knowledge, _ = components
+    settings = settings.model_copy(update={"api_key": "mock", "model": "mock"})
+    doc = knowledge.add_document("原神国家与现实文化", GENSHIN_SAMPLE, "自填的官方名称，未经核验")
+    evidence_id = next(e["id"] for e in knowledge.search("原神") if e["document_id"] == doc["id"])
+    fixed = False
+    writer_calls = []
+
+    def handler(request):
+        payload = json.loads(request.content)
+        messages = payload["messages"]
+        role = messages[0]["content"]
+        message = {"role": "assistant", "content": ""}
+        if "Role: Planner" in role:
+            message["content"] = json.dumps({"questions": ["原神"], "objective": GENSHIN_QUESTION,
+                                             "strategy": "Search relevant sources", "question_type": "decision"})
+        elif "Role: Researcher" in role:
+            if any(m["role"] == "tool" for m in messages):
+                message["content"] = "Collected evidence."
+            else:
+                message["tool_calls"] = [{"id": "search", "type": "function", "function": {
+                    "name": "search_knowledge", "arguments": '{"query":"原神"}'}}]
+        elif "Role: Evidence selector" in role:
+            message["content"] = json.dumps({"relevant_ids": [evidence_id]})
+        elif "Role: Analyst" in role:
+            writer_calls.append(payload)
+            rows = [("蒙德", "德国等欧洲文化"), ("璃月", "中国文化"), ("稻妻", "日本文化")]
+            if failure == "missing_row" and not fixed:
+                rows = rows[:2]
+            message["content"] = "# 对应关系\n\n未核验的资料说法：\n\n| 国家 | 文化参考 |\n| --- | --- |\n" + "\n".join(
+                f"| {name} | {value} [{evidence_id}] |" for name, value in rows)
+            if failure == "cut_off" and not fixed:
+                message["content"] += "\n\n它以概括"
+            if failure == "abstain" and not fixed:
+                message["content"] = f"# 建议\n\n没有官方核验，无法回答。[{evidence_id}]"
+        elif "Role: Critic" in role:
+            critique = dict(PASS_REVIEW)
+            if failure == "critic_blocking_issue" and not fixed:
+                critique["issues"] = ["尚未覆盖用户问题，需要补充条目。"]
+            if failure == "missing_critic_checks" and not fixed:
+                critique = {"passed": True, "issues": []}
+            if failure == "null_issues" and not fixed:
+                critique["issues"] = None
+            if failure == "null_warnings" and not fixed:
+                critique["warnings"] = None
+            message["content"] = json.dumps(critique)
+        else:
+            pytest.fail("Unexpected model role")
+        reason = "length" if failure == "provider_cutoff" and not fixed and "Role: Analyst" in role else "stop"
+        return httpx.Response(200, json={"choices": [{"message": message, "finish_reason": reason}],
+                                        "usage": {"prompt_tokens": 40, "completion_tokens": 20}})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as transport:
+        monkeypatch.setattr("evidenceforge.workflow.ModelClient", lambda s: ModelClient(s, client=transport))
+        run = store.create_run(GENSHIN_QUESTION, "live", {"require_approval": False, "max_steps": 3, "remember": True})
+        Engine(settings, store, knowledge).execute(run["id"])
+        failed = store.get_run(run["id"])
+        assert failed["status"] == "failed", failed.get("error")
+        assert failed["state"]["report_draft"]
+        assert len(writer_calls) == 2
+        assert not store.list_memories()
+        if failure == "provider_cutoff":
+            assert not failed["state"].get("report")
+            assert failed["state"]["generation"]["truncated"]
+            assert failed["state"]["metrics"]["truncated_responses"] == 2
+        else:
+            assert not failed["state"]["review"]["passed"]
+            assert failed["state"]["revision"] == 1
+            assert "未通过验收的草稿" in failed["state"]["report"]
+
+        # A retry of a terminal quality failure must really regenerate the answer.
+        fixed = True
+        Engine(settings, store, knowledge).execute(run["id"], resume=True)
+    result = store.get_run(run["id"])
+    assert result["status"] == "completed", result.get("error")
+    assert result["state"]["review"]["completeness_passed"]
+    assert result["state"]["answer_status"] == "unverified"
+    assert not result["state"]["report_draft"]
+    assert "未通过验收的草稿" not in result["state"]["report"]
+    assert len(writer_calls) == 3
+    assert writer_calls[-1]["max_tokens"] >= 8192
+    assert result["state"]["generation"]["finish_reason"] == "stop"
+    assert len([e for e in store.events(run["id"]) if e["node"] == "research" and e["kind"] == "start"]) == 1
+    assert len(store.list_memories()) == 1
