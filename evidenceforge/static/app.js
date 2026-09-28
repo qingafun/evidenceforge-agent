@@ -435,6 +435,7 @@
     const run = state.run;
     const data = run?.state || {};
     const evidence = array(data.evidence);
+    const plan = data.plan || data.approval?.plan;
     const metrics = data.metrics || {};
     const report = typeof data.report === "string" ? data.report : "";
     const status = run?.status;
@@ -475,7 +476,12 @@
     $("cancel-run").hidden = !run || !["queued", "running", "awaiting_approval"].includes(status);
     $("resume-run").hidden = status !== "failed";
     $("approval-panel").hidden = status !== "awaiting_approval";
-    $("approval-description").textContent = data.approval?.message || "请查看右侧的研究计划，确认后 Agent 将开始检索与调用工具。";
+    $("approval-description").textContent = "请审阅下方的研究目标、检索问题和执行策略。" + (run?.mode === "demo"
+      ? "离线演示按此固定计划执行，确认后可批准，或拒绝终止。"
+      : "可补充要求后批准，或拒绝终止。");
+    $("approval-feedback").placeholder = run?.mode === "demo"
+      ? "离线演示不使用补充要求；模型驱动模式支持将反馈用于后续检索与报告。"
+      : "补充关注点或约束，反馈会交给检索与报告撰写 Agent。";
     $("run-error").hidden = !run?.error;
     $("run-error").textContent = run?.error || "";
     const exportButton = $("export-report");
@@ -503,7 +509,8 @@
     else if (answerStatus === "unverified") notice.append(el("strong", "", "答案已整理，来源待核验"), el("p", "", "以下内容依据当前相关资料整理；尚未独立核验不等于没有可供参考的答案。"));
     else if (answerStatus === "insufficient_evidence") notice.append(el("strong", "", "相关证据不足"), el("p", "", "现有资料不足以回答问题。请按报告中的缺口补充相关资料后重新研究。"));
     renderWorkflow();
-    renderPlan(data.plan);
+    renderPlan(plan);
+    renderPlan(status === "awaiting_approval" ? plan : null, $("approval-plan"));
     renderEvidence(evidence);
     $("report-content").hidden = !report;
     $("report-empty").hidden = Boolean(report);
@@ -537,17 +544,21 @@
     }
   }
 
-  function renderPlan(plan) {
-    const target = $("plan-content");
+  function renderPlan(plan, target = $("plan-content")) {
     target.replaceChildren();
-    if (!plan) { target.append(el("p", "muted", "任务开始后，研究计划将在这里展开。")); return; }
-    if (plan.objective) target.append(el("p", "", plan.objective));
+    if (!plan) {
+      if (target.id === "plan-content") target.append(el("p", "muted", "任务开始后，研究计划将在这里展开。"));
+      else if (state.run?.status === "awaiting_approval") target.append(el("p", "", "尚未读取到研究计划，请刷新任务后查看。"));
+      return;
+    }
+    if (plan.objective) target.append(el("h5", "", "研究目标"), el("p", "", plan.objective));
     if (array(plan.questions).length) {
+      target.append(el("h5", "", "检索问题"));
       const list = el("ol");
       plan.questions.forEach((question) => list.append(el("li", "", question)));
       target.append(list);
     }
-    if (plan.strategy) target.append(el("p", "plan-strategy", plan.strategy));
+    if (plan.strategy) target.append(el("h5", "", "执行策略"), el("p", "plan-strategy", plan.strategy));
   }
 
   function evidenceDomId(id) {
