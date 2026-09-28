@@ -17,7 +17,7 @@
   const state = {
     health: null, runs: [], run: null, events: [], documents: [], memories: [],
     activeView: "workspace", activeTab: "report", source: null, refreshTimer: null,
-    pollTimer: null, refreshing: false, selection: 0, lastReport: null,
+    pollTimer: null, refreshing: false, selection: 0, questionRevision: 0, lastReport: null,
   };
 
   function el(tag, className, text) {
@@ -278,9 +278,15 @@
     state.pollTimer = setInterval(() => refreshCurrentRun(true), 3000);
   }
 
+  function setQuestion(value) {
+    $("question").value = value;
+    state.questionRevision++;
+  }
+
   async function selectRun(runId, initialRun = null) {
     stopSubscription();
     const selection = ++state.selection;
+    const questionRevision = state.questionRevision;
     state.events = [];
     state.lastReport = null;
     try {
@@ -291,6 +297,8 @@
       if (selection !== state.selection) return;
       state.run = run;
       state.events = array(events);
+      // Restore the selected question without replacing a draft edited while loading.
+      if (questionRevision === state.questionRevision) setQuestion(run.question);
       $("approval-feedback").value = "";
       renderRun();
       renderRecentRuns();
@@ -882,9 +890,10 @@
         switchTab(tabs[index], true);
       });
     });
-    document.querySelectorAll("[data-question]").forEach((button) => button.addEventListener("click", () => { $("question").value = button.dataset.question; $("question").focus(); }));
+    $("question").addEventListener("input", () => { state.questionRevision++; });
+    document.querySelectorAll("[data-question]").forEach((button) => button.addEventListener("click", () => { setQuestion(button.dataset.question); $("question").focus(); }));
     $("new-research").addEventListener("click", () => {
-      switchView("workspace"); $("question").value = ""; $("question").focus();
+      switchView("workspace"); setQuestion(""); $("question").focus();
       window.scrollTo({ top: 0, behavior: "smooth" }); showError("research-error", null);
     });
     $("research-form").addEventListener("submit", createResearch);
