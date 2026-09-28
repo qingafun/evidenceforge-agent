@@ -19,6 +19,7 @@
     activeView: "workspace", activeTab: "report", source: null, refreshTimer: null,
     pollTimer: null, refreshing: false, selection: 0, questionRevision: 0, lastReport: null,
   };
+  const initialReportEmpty = $("report-empty").cloneNode(true);
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -189,10 +190,11 @@
   }
 
   async function loadRuns(selectFirst = false) {
+    const selection = state.selection;
     try {
       state.runs = array(await api("/api/runs"));
       renderRecentRuns();
-      if (selectFirst && !state.run && state.runs.length) await selectRun(state.runs[0].id);
+      if (selectFirst && selection === state.selection && !state.run && state.runs.length) await selectRun(state.runs[0].id);
     } catch (error) {
       $("recent-runs").replaceChildren(el("p", "sidebar-empty", "暂时无法读取记录。点击上方刷新按钮重试。"));
       toast(error.message, true);
@@ -283,6 +285,24 @@
     state.questionRevision++;
   }
 
+  function newResearch() {
+    stopSubscription();
+    // Invalidate history and refresh requests still waiting for a response.
+    state.selection++;
+    state.run = null;
+    state.events = [];
+    setQuestion("");
+    $("approval-feedback").value = "";
+    showError("research-error", null);
+    switchView("workspace");
+    switchTab("report");
+    renderRun();
+    renderRecentRuns();
+    renderTrace();
+    $("question").focus();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function selectRun(runId, initialRun = null) {
     stopSubscription();
     const selection = ++state.selection;
@@ -358,6 +378,7 @@
       return;
     }
     const button = $("start-research");
+    const selection = state.selection;
     button.disabled = true;
     button.replaceChildren(document.createTextNode("创建中…"));
     try {
@@ -368,12 +389,15 @@
         }),
       });
       state.runs.unshift(run);
+      renderRecentRuns();
+      if (selection !== state.selection) return;
       switchTab("report");
       await selectRun(run.id, run);
+      if (state.run?.id !== run.id) return;
       await refreshCurrentRun(true);
       toast("研究任务已创建。");
     } catch (error) {
-      showError("research-error", error);
+      if (selection === state.selection) showError("research-error", error);
     } finally {
       button.disabled = false;
       button.replaceChildren(document.createTextNode("开始研究"), icon("arrow"));
@@ -462,7 +486,10 @@
     if (report) {
       exportButton.href = `/api/runs/${encodeURIComponent(run.id)}/report`;
       exportButton.download = `evidenceforge-${run.id.slice(0, 8)}${draft ? "-draft" : ""}.md`;
-    } else exportButton.removeAttribute("href");
+    } else {
+      exportButton.removeAttribute("href");
+      exportButton.removeAttribute("download");
+    }
     $("copy-report").disabled = !report;
     $("copy-report").setAttribute("aria-label", draft ? "复制 Markdown 草稿" : "复制 Markdown 报告");
     const notice = $("report-notice");
@@ -485,7 +512,9 @@
       state.lastReport = report;
     } else if (!report) {
       state.lastReport = null;
+      $("report-content").replaceChildren();
       if (run) renderPendingReport(run);
+      else $("report-empty").replaceChildren(...Array.from(initialReportEmpty.childNodes, (node) => node.cloneNode(true)));
     }
   }
 
@@ -892,10 +921,7 @@
     });
     $("question").addEventListener("input", () => { state.questionRevision++; });
     document.querySelectorAll("[data-question]").forEach((button) => button.addEventListener("click", () => { setQuestion(button.dataset.question); $("question").focus(); }));
-    $("new-research").addEventListener("click", () => {
-      switchView("workspace"); setQuestion(""); $("question").focus();
-      window.scrollTo({ top: 0, behavior: "smooth" }); showError("research-error", null);
-    });
+    $("new-research").addEventListener("click", newResearch);
     $("research-form").addEventListener("submit", createResearch);
     $("run-mode").addEventListener("change", updateModeNotice);
     $("refresh-runs").addEventListener("click", async () => { await Promise.all([loadRuns(), loadHealth()]); await refreshCurrentRun(true); });
