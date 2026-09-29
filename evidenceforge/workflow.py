@@ -83,8 +83,9 @@ def citation_review(report: str, evidence: list[dict]) -> dict:
 
 
 class Engine:
-    def __init__(self, settings, store, knowledge):
+    def __init__(self, settings, store, knowledge, stop_event=None):
         self.settings, self.store, self.knowledge = settings, store, knowledge
+        self.stop_event = stop_event
         self.registry = ToolRegistry(knowledge, store, settings)
 
     def execute(self, run_id: str, approval: dict | None = None, resume: bool = False):
@@ -107,6 +108,9 @@ class Engine:
             self.store.update_run(run_id, state={"metrics": dict(metrics)})
 
         def check_cancel():
+            if self.stop_event is not None and self.stop_event.is_set():
+                self.store.update_run(run_id, status="cancelled")
+                raise Cancelled()
             if self.store.get_run(run_id)["status"] == "cancelled":
                 raise Cancelled()
 

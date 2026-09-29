@@ -93,6 +93,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/health")
     def health():
         return {"status": "ok", "version": __version__, "mode": "demo", "model": settings.model,
+                "desktop": bool(getattr(app.state, "desktop", False)),
                 "live_available": settings.live_available, "knowledge": knowledge.stats(),
                 "tools": [t["function"]["name"] for t in engine.registry.schemas()]}
 

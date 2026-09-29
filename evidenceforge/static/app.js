@@ -163,6 +163,8 @@
   async function loadHealth() {
     try {
       state.health = await api("/api/health");
+      $("desktop-settings-link").hidden = state.health.desktop !== true;
+      if (state.health.desktop === true) document.querySelector(".api-link").target = "_self";
       $("health-label").className = "health-label connected";
       $("health-label").replaceChildren(el("span", "status-dot"), document.createTextNode("本地服务已连接"));
       $("connection-dot").classList.add("connected");
@@ -186,7 +188,14 @@
     $("live-warning").hidden = !live;
     $("live-warning").textContent = available
       ? "已检测到服务端模型配置。研究将调用模型 API，可能产生费用；工具预算限制工具调用次数。"
-      : "模型尚未配置：请在服务端 .env 设置 EF_API_KEY、EF_BASE_URL 和 EF_MODEL 后重启。密钥不会在浏览器中保存。";
+      : state.health?.desktop === true
+        ? "模型尚未配置：请在「模型与 API 设置」中填写 API Key、Base URL 和模型名称，保存后即可开始研究。"
+        : "模型尚未配置：请在服务端 .env 设置 EF_API_KEY、EF_BASE_URL 和 EF_MODEL 后重启。密钥不会在浏览器中保存。";
+    if (live && !available && state.health?.desktop === true) {
+      const link = el("a", "", "前往设置 →");
+      link.href = "/desktop/settings";
+      $("live-warning").append(document.createTextNode(" "), link);
+    }
   }
 
   async function loadRuns(selectFirst = false) {
@@ -374,7 +383,9 @@
       return;
     }
     if ($("run-mode").value === "live" && state.health?.live_available === false) {
-      showError("research-error", new Error("模型 API 尚未配置。请设置 EF_API_KEY、EF_BASE_URL、EF_MODEL 并重启服务，或切换到离线演示。"));
+      showError("research-error", new Error(state.health?.desktop === true
+        ? "模型 API 尚未配置。请打开「模型与 API 设置」填写并保存，或切换到离线演示。"
+        : "模型 API 尚未配置。请设置 EF_API_KEY、EF_BASE_URL、EF_MODEL 并重启服务，或切换到离线演示。"));
       return;
     }
     const button = $("start-research");

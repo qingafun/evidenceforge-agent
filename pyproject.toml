@@ -22,6 +22,7 @@ dev = ["pytest>=8.3,<10", "ruff>=0.11,<1"]
 [project.scripts]
 evidenceforge = "evidenceforge.cli:main"
 evidenceforge-mcp = "evidenceforge.mcp_server:main"
+evidenceforge-desktop = "evidenceforge.desktop:main"
 
 [tool.setuptools.packages.find]
 include = ["evidenceforge*", "evals*"]

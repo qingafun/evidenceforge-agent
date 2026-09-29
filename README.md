@@ -44,6 +44,8 @@
 
 ## 快速启动
 
+**Windows 桌面版**：可将当前源码打包为 `EvidenceForge.exe`，界面沿用网页版，并提供模型 API Key、URL、模型名和联网搜索密钥设置。执行 `powershell -ExecutionPolicy Bypass -File .\scripts\build-windows.ps1`；完整步骤、数据位置与 WebView2 要求见 [桌面版说明](docs/DESKTOP.md)。成品包含 Python，使用者无需安装开发环境。
+
 需要 **Python 3.11 或 3.12**，推荐 3.12。默认不需要 Node.js、Docker、GPU、API Key 或模型下载。
 
 ```bash
