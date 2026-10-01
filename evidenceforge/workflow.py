@@ -92,6 +92,11 @@ class Engine:
         self.registry = ToolRegistry(knowledge, store, settings)
 
     def execute(self, run_id: str, approval: dict | None = None, resume: bool = False):
+        with self.store.execution(run_id) as acquired:
+            if acquired:
+                return self._execute(run_id, approval, resume)
+
+    def _execute(self, run_id: str, approval: dict | None = None, resume: bool = False):
         record = self.store.get_run(run_id)
         if not record or record["status"] == "cancelled":
             return

@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -16,6 +17,12 @@ class EvidenceReviewError(ValueError):
         self.status_code = status_code
 
 
+class RunDeletionError(ValueError):
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -23,6 +30,8 @@ def now() -> str:
 class Store:
     def __init__(self, path: Path | str):
         self.path = str(path)
+        self._execution_lock = threading.RLock()
+        self._executing: set[str] = set()
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as conn:
             conn.executescript("""
@@ -78,6 +87,45 @@ class Store:
         with self.connection() as conn:
             return [self._run(row) for row in conn.execute(
                 "SELECT * FROM runs ORDER BY created_at DESC LIMIT 100")]
+
+    @contextmanager
+    def execution(self, run_id: str):
+        """Keep cancelled/finished workers protected until their final writes end."""
+        with self._execution_lock:
+            acquired = run_id not in self._executing
+            if acquired:
+                self._executing.add(run_id)
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                with self._execution_lock:
+                    self._executing.remove(run_id)
+
+    def delete_run(self, run_id: str, checkpoint_path: Path | str):
+        """Remove one stopped task and its trace/checkpoints, keeping shared data."""
+        with self._execution_lock, self.connection() as conn:
+            if run_id in self._executing:
+                raise RunDeletionError(409, "任务仍在结束处理中，请稍后再删除。")
+            checkpoint_path = Path(checkpoint_path)
+            has_checkpoints = checkpoint_path.is_file()
+            if has_checkpoints:
+                conn.execute("ATTACH DATABASE ? AS run_checkpoints", (str(checkpoint_path),))
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()
+            if row is None:
+                raise RunDeletionError(404, "研究记录不存在或已删除。")
+            if row["status"] not in {"completed", "failed", "cancelled"}:
+                raise RunDeletionError(409, "请先停止研究，再删除历史记录。")
+            if has_checkpoints:
+                tables = {row[0] for row in conn.execute(
+                    "SELECT name FROM run_checkpoints.sqlite_master WHERE type='table'")}
+                # These are the two task tables in the pinned SQLite checkpointer.
+                for table in ("writes", "checkpoints"):
+                    if table in tables:
+                        conn.execute(f"DELETE FROM run_checkpoints.{table} WHERE thread_id=?", (run_id,))
+            conn.execute("DELETE FROM events WHERE run_id=?", (run_id,))
+            conn.execute("DELETE FROM runs WHERE id=?", (run_id,))
 
     def update_run(self, run_id: str, *, status: str | None = None,
                    state: dict | None = None, error: str | None = None) -> dict:
@@ -150,8 +198,9 @@ class Store:
 
     def add_event(self, run_id: str, node: str, kind: str, message: str, data: dict | None = None):
         with self.connection() as conn:
-            conn.execute("INSERT INTO events(run_id,node,kind,message,data,created_at) VALUES(?,?,?,?,?,?)",
-                         (run_id, node, kind, message, json.dumps(data or {}, ensure_ascii=False), now()))
+            conn.execute("INSERT INTO events(run_id,node,kind,message,data,created_at) "
+                         "SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM runs WHERE id=?)",
+                         (run_id, node, kind, message, json.dumps(data or {}, ensure_ascii=False), now(), run_id))
 
     def events(self, run_id: str, after: int = 0) -> list[dict]:
         with self.connection() as conn:

@@ -262,9 +262,12 @@ def self_test(server: DesktopServer, output: Path):
         reviewed.raise_for_status()
         assert reviewed.json()["state"]["evidence_reviews"][evidence_id]["human"]["method"] == "human"
         assert "人工已审阅" in client.get(f"/api/runs/{run_id}/report").text
+        assert client.delete(f"/api/runs/{run_id}").status_code == 204
+        assert client.get(f"/api/runs/{run_id}").status_code == 404
+        assert client.get(f"/api/runs/{run_id}/trace").status_code == 404
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({"passed": True, "desktop": True, "frozen": bool(getattr(sys, "frozen", False)),
-                                  "checks": ["auth", "bundled_assets", "corpus", "settings_redaction", "DPAPI", "approval", "demo_report", "evidence_reviews", "human_review"]}),
+                                  "checks": ["auth", "bundled_assets", "corpus", "settings_redaction", "DPAPI", "approval", "demo_report", "evidence_reviews", "human_review", "delete_history"]}),
                       encoding="utf-8")
 
 

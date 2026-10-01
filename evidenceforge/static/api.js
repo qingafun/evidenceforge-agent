@@ -16,6 +16,7 @@
     "get /api/health": "检查服务状态与模型配置",
     "get /api/runs": "列出研究任务", "post /api/runs": "创建研究任务",
     "get /api/runs/{run_id}": "读取任务状态与研究结果",
+    "delete /api/runs/{run_id}": "删除已停止的研究历史",
     "post /api/runs/{run_id}/approve": "批准或拒绝研究计划",
     "post /api/runs/{run_id}/resume": "从检查点恢复失败的任务",
     "post /api/runs/{run_id}/cancel": "终止研究任务",
@@ -29,6 +30,7 @@
     "get /api/evaluations": "读取本地评测结果",
   };
   const localNotes = {
+    "delete /api/runs/{run_id}": "永久删除已完成、失败或已停止的研究及其报告、证据审阅、事件和恢复检查点，返回 204。知识库与长期记忆保留。任务正在运行、等待审批或尚未结束后台请求时返回 409；请先停止并等请求结束。记录不存在时返回 404。",
     "get /api/runs/{run_id}/events": "事件流使用 text/event-stream。trace 事件包含节点、事件类型、消息与数据；status 事件标记当前阶段结束。客户端可以通过 after 查询参数或 Last-Event-ID 请求头，从指定事件之后继续读取。",
     "get /api/runs/{run_id}/report": "已生成的报告以 text/markdown 返回，并设置附件下载文件名。报告尚未生成时，服务会返回错误。",
     "post /api/runs": "任务在后台推进。创建后通过任务查询或 SSE 订阅读取进度。demo 模式无需模型 API；live 模式需要服务端配置。",

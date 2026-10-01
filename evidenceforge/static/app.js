@@ -20,7 +20,8 @@
     activeView: "workspace", activeTab: "report", source: null, refreshTimer: null,
     pollTimer: null, refreshing: false, selection: 0, questionRevision: 0, lastReport: null,
     reviewDrafts: new Map(), reviewSaving: new Set(),
-    copyingReport: false,
+    copyingReport: false, deletingRuns: new Set(), deletedRuns: new Set(),
+    runsRequest: 0, selectingRunId: null,
   };
   const initialReportEmpty = $("report-empty").cloneNode(true);
 
@@ -207,12 +208,16 @@
 
   async function loadRuns(selectFirst = false) {
     const selection = state.selection;
+    const request = ++state.runsRequest;
     try {
-      state.runs = array(await api("/api/runs"));
+      const runs = array(await api("/api/runs"));
+      if (request !== state.runsRequest) return;
+      state.runs = runs.filter((run) => !state.deletedRuns.has(run.id));
       renderRecentRuns();
       if (selectFirst && selection === state.selection && !state.run && state.runs.length) await selectRun(state.runs[0].id);
     } catch (error) {
-      $("recent-runs").replaceChildren(el("p", "sidebar-empty", "暂时无法读取记录。点击上方刷新按钮重试。"));
+      if (request !== state.runsRequest) return;
+      if (!state.runs.length) $("recent-runs").replaceChildren(el("p", "sidebar-empty", "暂时无法读取记录。点击上方刷新按钮重试。"));
       toast(error.message, true);
     }
   }
@@ -225,17 +230,71 @@
       return;
     }
     state.runs.forEach((run) => {
+      const row = el("div", `recent-run-row${run.id === state.run?.id ? " selected" : ""}`);
+      row.dataset.runId = run.id;
+      const deleting = state.deletingRuns.has(run.id);
+      const active = ["queued", "running", "awaiting_approval"].includes(run.status);
       const button = el("button", `recent-run${run.id === state.run?.id ? " selected" : ""}`);
       const statusText = run.state?.human_review_blocked ? "人工审阅有异议 · 草稿" : isDraft(run) ? "报告草稿" : labels[run.status] || run.status;
       button.type = "button";
+      button.disabled = deleting;
       button.title = `${run.question}\n${statusText} · ${shortDate(run.created_at)}`;
       button.setAttribute("aria-label", `${run.question}，${statusText}`);
       const dot = el("i", `recent-status ${run.state?.human_review_blocked ? "awaiting_approval" : Object.hasOwn(labels, run.status) ? run.status : ""}`);
       dot.setAttribute("aria-hidden", "true");
       button.append(icon("file"), el("span", "", run.question), dot);
       button.addEventListener("click", () => { switchView("workspace"); selectRun(run.id); });
-      container.append(button);
+      const remove = el("button", "icon-button recent-delete");
+      remove.type = "button";
+      remove.disabled = deleting;
+      remove.setAttribute("aria-label", `删除研究：${run.question}`);
+      remove.setAttribute("aria-disabled", String(active || deleting));
+      remove.title = deleting ? "正在删除…" : active ? "请先停止研究，再删除记录" : "删除研究记录";
+      remove.append(icon(deleting ? "clock" : "trash"));
+      remove.addEventListener("click", () => deleteResearch(run));
+      row.append(button, remove);
+      container.append(row);
     });
+  }
+
+  async function deleteResearch(run) {
+    if (state.deletingRuns.has(run.id) || state.deletedRuns.has(run.id)) return;
+    if (["queued", "running", "awaiting_approval"].includes(run.status)) {
+      toast("请先打开这项研究并点击“停止”，再删除历史记录。", true);
+      return;
+    }
+    if (!window.confirm(`删除研究“${run.question}”？\n报告、证据快照和执行轨迹将一并删除，无法恢复。知识库和长期记忆会保留。`)) return;
+    state.deletingRuns.add(run.id);
+    renderRecentRuns();
+    try {
+      try { await api(`/api/runs/${encodeURIComponent(run.id)}`, { method: "DELETE" }); }
+      catch (error) { if (error.status !== 404) throw error; }
+      forgetResearch(run.id);
+      toast("研究记录已删除，知识库和长期记忆已保留。");
+      // The removed control no longer exists; give keyboard users a stable next target.
+      if (document.activeElement === document.body) $("refresh-runs").focus({ preventScroll: true });
+      await loadRuns();
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      state.deletingRuns.delete(run.id);
+      renderRecentRuns();
+    }
+  }
+
+  function forgetResearch(runId) {
+    const run = state.run?.id === runId ? state.run : state.runs.find((item) => item.id === runId);
+    // Remember removals for this page lifetime, including snapshots captured before deletion.
+    state.deletedRuns.add(runId);
+    state.runs = state.runs.filter((item) => item.id !== runId);
+    for (const key of state.reviewDrafts.keys()) {
+      if (JSON.parse(key)[0] === runId) state.reviewDrafts.delete(key);
+    }
+    if (state.run?.id === runId || state.selectingRunId === runId) {
+      const keepPendingSelection = state.selectingRunId && state.selectingRunId !== runId;
+      resetSelectedRun(!keepPendingSelection && Boolean(run) && $("question").value === run.question, keepPendingSelection);
+    }
+    renderRecentRuns();
   }
 
   function stopSubscription() {
@@ -307,7 +366,17 @@
           scheduleRefresh();
         } catch { /* A later polling refresh recovers malformed or missed SSE data. */ }
       });
-      source.addEventListener("status", () => scheduleRefresh());
+      source.addEventListener("status", (message) => {
+        if (state.run?.id !== runId) return;
+        try {
+          if (JSON.parse(message.data).status === "deleted") {
+            forgetResearch(runId);
+            toast("这项研究已在其他窗口删除。");
+            return;
+          }
+        } catch { /* A snapshot refresh resolves incomplete status messages. */ }
+        scheduleRefresh();
+      });
       source.onopen = () => { if (state.run?.id === runId) $("trace-live").textContent = "实时更新"; };
       source.onerror = () => {
         if (state.run?.id === runId) {
@@ -325,27 +394,36 @@
     state.questionRevision++;
   }
 
-  function newResearch() {
+  function resetSelectedRun(clearQuestion = true, keepPendingSelection = false) {
     stopSubscription();
     // Invalidate history and refresh requests still waiting for a response.
-    state.selection++;
+    if (!keepPendingSelection) {
+      state.selection++;
+      state.selectingRunId = null;
+    }
     state.run = null;
     state.events = [];
-    setQuestion("");
+    if (clearQuestion) setQuestion("");
     $("approval-feedback").value = "";
     showError("research-error", null);
-    switchView("workspace");
     switchTab("report");
     renderRun();
     renderRecentRuns();
     renderTrace();
+  }
+
+  function newResearch() {
+    resetSelectedRun();
+    switchView("workspace");
     $("question").focus();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function selectRun(runId, initialRun = null) {
+    if (state.deletedRuns.has(runId) || state.deletingRuns.has(runId)) return;
     stopSubscription();
     const selection = ++state.selection;
+    state.selectingRunId = runId;
     const questionRevision = state.questionRevision;
     state.events = [];
     state.lastReport = null;
@@ -354,7 +432,7 @@
         initialRun ? Promise.resolve(initialRun) : api(`/api/runs/${encodeURIComponent(runId)}`),
         api(`/api/runs/${encodeURIComponent(runId)}/trace`),
       ]);
-      if (selection !== state.selection) return;
+      if (selection !== state.selection || state.deletedRuns.has(runId)) return;
       state.run = run;
       state.events = array(events);
       // Restore the selected question without replacing a draft edited while loading.
@@ -365,7 +443,12 @@
       renderTrace();
       subscribeRun();
     } catch (error) {
-      if (selection === state.selection) toast(error.message, true);
+      if (selection === state.selection) {
+        if (error.status === 404) { forgetResearch(runId); toast("这项研究已不存在，历史记录已更新。"); }
+        else toast(error.message, true);
+      }
+    } finally {
+      if (selection === state.selection) state.selectingRunId = null;
     }
   }
 
@@ -376,7 +459,7 @@
     state.refreshing = true;
     try {
       const run = await api(`/api/runs/${encodeURIComponent(runId)}`);
-      if (state.run?.id !== runId || selection !== state.selection) return;
+      if (state.run?.id !== runId || selection !== state.selection || state.deletedRuns.has(runId)) return;
       const oldStatus = state.run.status;
       state.run = run;
       if (includeTrace || oldStatus !== run.status) {
@@ -398,7 +481,10 @@
         toast("报告未通过验收，草稿已保留。请查看质量审查中的具体问题。", true);
       }
     } catch (error) {
-      if (state.run?.id === runId) $("trace-live").textContent = "连接中断，正在重试";
+      if (state.run?.id === runId && selection === state.selection) {
+        if (error.status === 404) { forgetResearch(runId); toast("这项研究已在其他窗口删除。"); }
+        else $("trace-live").textContent = "连接中断，正在重试";
+      }
     } finally {
       state.refreshing = false;
     }
@@ -800,6 +886,7 @@
       const run = await api(`/api/runs/${encodeURIComponent(runId)}/evidence/${encodeURIComponent(evidenceId)}/review`, {
         method: "PUT", body: JSON.stringify({ fingerprint: draft.fingerprint, verdict: draft.verdict, reason: draft.reason.trim() }),
       });
+      if (state.deletedRuns.has(runId)) return;
       state.reviewDrafts.delete(key);
       const index = state.runs.findIndex((item) => item.id === runId);
       if (index >= 0) state.runs[index] = run;
@@ -863,12 +950,14 @@
   async function runAction(action, body, buttonIds) {
     if (!state.run) return;
     const runId = state.run.id;
+    const selection = state.selection;
     buttonIds.forEach((id) => { $(id).disabled = true; });
     try {
       const run = await api(`/api/runs/${encodeURIComponent(runId)}/${action}`, {
         method: "POST", ...(body ? { body: JSON.stringify(body) } : {}),
       });
-      if (state.run?.id === runId) {
+      if (state.deletedRuns.has(runId)) return;
+      if (state.run?.id === runId && selection === state.selection) {
         state.run = run;
         renderRun();
         subscribeRun();

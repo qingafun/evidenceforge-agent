@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -16,7 +17,7 @@ from .bootstrap import seed_demo_once
 from .config import Settings
 from .evidence_review import export_review_appendix, human_review_blocked, present_reviews, review_summary
 from .knowledge import KnowledgeBase
-from .store import EvidenceReviewError, Store
+from .store import EvidenceReviewError, RunDeletionError, Store
 from .workflow import Engine
 
 
@@ -92,6 +93,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     def present_run(run):
+        if run is None:
+            raise HTTPException(404, "研究记录不存在或已删除。")
         state = run["state"]
         state["evidence_reviews"] = present_reviews(run["question"], state)
         state["human_review_blocked"] = human_review_blocked(run["question"], state)
@@ -129,6 +132,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/runs/{run_id}")
     def read_run(run_id: str):
         return get_run(run_id)
+
+    @app.delete("/api/runs/{run_id}", status_code=204)
+    def delete_run(run_id: str):
+        try:
+            store.delete_run(run_id, settings.data_dir / "checkpoints.sqlite")
+        except RunDeletionError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from None
+        except sqlite3.Error:
+            raise HTTPException(503, "暂时无法删除研究记录，请稍后重试。") from None
+        return Response(status_code=204)
 
     @app.put("/api/runs/{run_id}/evidence/{evidence_id}/review")
     def review_evidence(run_id: str, evidence_id: str, body: EvidenceReviewInput):
@@ -182,7 +195,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 for row in rows:
                     cursor = row["id"]
                     yield f"id: {cursor}\nevent: trace\ndata: {json.dumps(row, ensure_ascii=False)}\n\n"
-                status = store.get_run(run_id)["status"]
+                current = store.get_run(run_id)
+                if current is None:
+                    yield 'event: status\ndata: {"status": "deleted"}\n\n'
+                    break
+                status = current["status"]
                 if status not in ("running", "queued"):
                     # Drain events committed between the first query and status read.
                     for row in store.events(run_id, cursor):
