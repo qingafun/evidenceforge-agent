@@ -252,9 +252,19 @@ def self_test(server: DesktopServer, output: Path):
             time.sleep(0.1)
         assert run["status"] == "completed", run.get("error")
         assert client.get(f"/api/runs/{run_id}/report").status_code == 200
+        reviews = run["state"]["evidence_reviews"]
+        assert reviews and all(entry["automatic"]["method"] == "rules" for entry in reviews.values())
+        evidence_id = next(iter(reviews))
+        reviewed = client.put(f"/api/runs/{run_id}/evidence/{evidence_id}/review", json={
+            "fingerprint": reviews[evidence_id]["fingerprint"], "verdict": "supported",
+            "reason": "自检用审阅记录：确认测试资料与离线摘录对应。",
+        })
+        reviewed.raise_for_status()
+        assert reviewed.json()["state"]["evidence_reviews"][evidence_id]["human"]["method"] == "human"
+        assert "人工已审阅" in client.get(f"/api/runs/{run_id}/report").text
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({"passed": True, "desktop": True, "frozen": bool(getattr(sys, "frozen", False)),
-                                  "checks": ["auth", "bundled_assets", "corpus", "settings_redaction", "DPAPI", "approval", "demo_report"]}),
+                                  "checks": ["auth", "bundled_assets", "corpus", "settings_redaction", "DPAPI", "approval", "demo_report", "evidence_reviews", "human_review"]}),
                       encoding="utf-8")
 
 

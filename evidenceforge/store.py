@@ -7,6 +7,14 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .evidence_review import fingerprint, present_reviews
+
+
+class EvidenceReviewError(ValueError):
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -78,7 +86,17 @@ class Store:
             record = self._run(conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone())
             if record is None:
                 raise KeyError(run_id)
+            previous_reviews = present_reviews(record["question"], record["state"])
             record["state"].update(state or {})
+            # A cancelled worker may return after a person reviewed its draft.
+            # Retain those decisions only while their exact material is unchanged.
+            current_reviews = present_reviews(record["question"], record["state"])
+            for identifier, previous in previous_reviews.items():
+                current = current_reviews.get(identifier)
+                if current and previous["fingerprint"] == current["fingerprint"] and previous.get("human"):
+                    current["human"] = previous["human"]
+            if current_reviews:
+                record["state"]["evidence_reviews"] = current_reviews
             # A cancellation cannot be overwritten by a worker finishing a node.
             new_status = "cancelled" if record["status"] == "cancelled" else (status or record["status"])
             current_error = error if error is not None else record["error"]
@@ -86,6 +104,40 @@ class Store:
                 current_error = None
             conn.execute("UPDATE runs SET status=?,state=?,error=?,updated_at=? WHERE id=?",
                          (new_status, json.dumps(record["state"], ensure_ascii=False), current_error, now(), run_id))
+        return self.get_run(run_id)
+
+    def review_evidence(self, run_id: str, evidence_id: str, version: str,
+                        verdict: str, reason: str) -> dict:
+        """Commit one human judgment and its audit event against current material."""
+        if verdict not in {"supported", "uncertain", "contradicted"} or not 1 <= len(reason.strip()) <= 2000:
+            raise EvidenceReviewError(422, "审阅结论或理由不合法。")
+        with self.connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            run = self._run(conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone())
+            if run is None:
+                raise EvidenceReviewError(404, "任务不存在")
+            state = run["state"]
+            item = next((item for item in state.get("evidence", []) if item["id"] == evidence_id), None)
+            if item is None:
+                raise EvidenceReviewError(404, "证据不存在")
+            if run["status"] not in {"completed", "failed", "cancelled"} or not state.get("report"):
+                raise EvidenceReviewError(409, "请在任务结束并生成报告后审阅证据。")
+            current_version = fingerprint(run["question"], state, item)
+            if version != current_version:
+                raise EvidenceReviewError(409, "报告或证据已变化，请刷新后重新审阅。")
+            reviews = present_reviews(run["question"], state)
+            previous = reviews[evidence_id].get("human")
+            stamp = now()
+            human = {"method": "human", "verdict": verdict, "reason": reason.strip(), "reviewed_at": stamp}
+            reviews[evidence_id]["human"] = human
+            state["evidence_reviews"] = reviews
+            conn.execute("UPDATE runs SET state=?,updated_at=? WHERE id=?",
+                         (json.dumps(state, ensure_ascii=False), stamp, run_id))
+            audit = {"evidence_id": evidence_id, "fingerprint": current_version,
+                     "previous": previous, "review": human}
+            conn.execute("INSERT INTO events(run_id,node,kind,message,data,created_at) VALUES(?,?,?,?,?,?)",
+                         (run_id, "evidence_review", "human_review", "已保存人工证据审阅。",
+                          json.dumps(audit, ensure_ascii=False), stamp))
         return self.get_run(run_id)
 
     def transition(self, run_id: str, expected: tuple[str, ...], status: str) -> bool:

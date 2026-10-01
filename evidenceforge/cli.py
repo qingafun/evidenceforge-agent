@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from .config import Settings
+from .evidence_review import export_review_appendix
 
 
 def main():
@@ -45,7 +46,8 @@ def main():
     if result["status"] != "completed":
         raise SystemExit(result.get("error") or result["status"])
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(result["state"]["report"], encoding="utf-8")
+    report = result["state"]["report"] + export_review_appendix(result["question"], result["state"])
+    args.output.write_text(report, encoding="utf-8")
     print(f"Report: {args.output.resolve()}")
     print(json.dumps(result["state"]["metrics"], indent=2))
 

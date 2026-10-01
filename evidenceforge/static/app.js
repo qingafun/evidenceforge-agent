@@ -11,13 +11,16 @@
   const answerLabels = { answered: "已有依据", unverified: "待核验", insufficient_evidence: "证据不足" };
   const nodeLabels = {
     plan: "规划 Agent", approval: "人工审批", research: "研究 Agent", curate: "证据筛选",
-    write: "撰写 Agent", review: "审查 Agent", revise: "修订", finalize: "整理报告", system: "系统",
+    write: "撰写 Agent", evidence_review: "证据审阅", review: "审查 Agent", revise: "修订", finalize: "整理报告", system: "系统",
   };
+  const evidenceVerdicts = { supported: "支持引用", uncertain: "有疑问", contradicted: "不支持引用", not_used: "未用于报告", unchecked: "待语义审阅" };
   const views = { workspace: "研究工作台", knowledge: "知识库", memory: "长期记忆", evaluations: "评测中心" };
   const state = {
     health: null, runs: [], run: null, events: [], documents: [], memories: [],
     activeView: "workspace", activeTab: "report", source: null, refreshTimer: null,
     pollTimer: null, refreshing: false, selection: 0, questionRevision: 0, lastReport: null,
+    reviewDrafts: new Map(), reviewSaving: new Set(),
+    copyingReport: false,
   };
   const initialReportEmpty = $("report-empty").cloneNode(true);
 
@@ -62,7 +65,11 @@
     const text = await response.text();
     let payload = null;
     try { payload = text ? JSON.parse(text) : null; } catch { /* Non-JSON errors are not inserted into the page. */ }
-    if (!response.ok) throw new Error(readableError(payload?.detail || `请求失败（HTTP ${response.status}）。`));
+    if (!response.ok) {
+      const error = new Error(readableError(payload?.detail || `请求失败（HTTP ${response.status}）。`));
+      error.status = response.status;
+      throw error;
+    }
     return payload;
   }
 
@@ -219,10 +226,11 @@
     }
     state.runs.forEach((run) => {
       const button = el("button", `recent-run${run.id === state.run?.id ? " selected" : ""}`);
+      const statusText = run.state?.human_review_blocked ? "人工审阅有异议 · 草稿" : isDraft(run) ? "报告草稿" : labels[run.status] || run.status;
       button.type = "button";
-      button.title = `${run.question}\n${labels[run.status] || run.status} · ${shortDate(run.created_at)}`;
-      button.setAttribute("aria-label", `${run.question}，${labels[run.status] || run.status}`);
-      const dot = el("i", `recent-status ${Object.hasOwn(labels, run.status) ? run.status : ""}`);
+      button.title = `${run.question}\n${statusText} · ${shortDate(run.created_at)}`;
+      button.setAttribute("aria-label", `${run.question}，${statusText}`);
+      const dot = el("i", `recent-status ${run.state?.human_review_blocked ? "awaiting_approval" : Object.hasOwn(labels, run.status) ? run.status : ""}`);
       dot.setAttribute("aria-hidden", "true");
       button.append(icon("file"), el("span", "", run.question), dot);
       button.addEventListener("click", () => { switchView("workspace"); selectRun(run.id); });
@@ -245,7 +253,30 @@
   }
 
   function isDraft(run = state.run) {
-    return Boolean(run?.state?.report) && (run.state.report_draft === true || run.state.review?.passed === false);
+    return Boolean(run?.state?.report) && (run.state.report_draft === true || run.state.review?.passed === false || run.state.human_review_blocked === true);
+  }
+
+  function evidenceReview(item, run = state.run) {
+    const record = run?.state?.evidence_reviews?.[String(item.id)] || {};
+    const automatic = record.automatic && Object.hasOwn(evidenceVerdicts, record.automatic.verdict) ? record.automatic : null;
+    const human = record.human?.method === "human" && ["supported", "uncertain", "contradicted"].includes(record.human.verdict) ? record.human : null;
+    const agent = automatic?.method === "agent" && automatic.verdict !== "unchecked" ? automatic : null;
+    return { record, automatic, human, agent, effective: human || agent };
+  }
+
+  function evidenceReviewCounts(run = state.run) {
+    const evidence = array(run?.state?.evidence);
+    const counts = { total: evidence.length, reviewed: 0, pending: 0, rules: 0, issues: 0, human: 0, agent: 0 };
+    evidence.forEach((item) => {
+      const review = evidenceReview(item, run);
+      if (review.effective) counts.reviewed++;
+      else counts.pending++;
+      if (review.human) counts.human++;
+      if (review.agent) counts.agent++;
+      if (review.automatic?.method === "rules") counts.rules++;
+      if (["uncertain", "contradicted"].includes(review.effective?.verdict)) counts.issues++;
+    });
+    return counts;
   }
 
   function scheduleRefresh() {
@@ -418,7 +449,7 @@
   function renderWorkflow() {
     const run = state.run;
     const data = run?.state || {};
-    const order = ["plan", "approval", "research", "write", "review"];
+    const order = ["plan", "approval", "research", "write", "evidence_review", "review"];
     let active = -1;
     if (run) {
       if (run.status === "completed") active = order.length;
@@ -426,7 +457,8 @@
       else {
         const latest = [...state.events].reverse().find((event) => order.includes(event.node) || ["revise", "finalize"].includes(event.node));
         active = latest ? order.indexOf(latest.node) : 0;
-        if (latest?.node === "revise" || latest?.node === "finalize") active = 4;
+        if (latest?.node === "revise") active = 3;
+        if (latest?.node === "finalize") active = 5;
         if (!latest && data.plan) active = data.approval?.approved ? 2 : 1;
       }
     }
@@ -451,9 +483,11 @@
     const report = typeof data.report === "string" ? data.report : "";
     const status = run?.status;
     const draft = isDraft(run);
+    const humanBlocked = data.human_review_blocked === true;
+    const reviewCounts = evidenceReviewCounts(run);
     const answerStatus = data.answer_status || data.review?.answer_status;
-    $("run-status").className = `status-badge ${Object.hasOwn(labels, status) ? status : "neutral"}`;
-    $("run-status").textContent = status === "failed" && draft ? "验收未通过" : labels[status] || "等待开始";
+    $("run-status").className = `status-badge ${humanBlocked ? "awaiting_approval" : Object.hasOwn(labels, status) ? status : "neutral"}`;
+    $("run-status").textContent = humanBlocked ? "人工审阅有异议" : status === "failed" && draft ? "验收未通过" : labels[status] || "等待开始";
     $("run-question").textContent = run?.question || "尚未创建研究任务";
     $("metric-evidence").textContent = run ? number(evidence.length) : "—";
     $("metric-tools").textContent = run ? number(metrics.tool_calls ?? 0) : "—";
@@ -466,23 +500,24 @@
     $("detail-answer").textContent = answerLabels[answerStatus] || "尚未形成答案";
     $("detail-answer").title = answerStatus === "unverified" ? "已按相关资料给出答案，但来源或结论尚未独立核验。" : answerStatus === "answered" ? "答案有引用依据，仍应结合原文判断事实是否正确。" : "";
     const hasQualityChecks = typeof data.review?.completeness_passed === "boolean";
-    $("detail-review").textContent = data.review ? (data.review.passed ? (hasQualityChecks ? "全部验收通过" : "原有审查通过") : "存在待解决问题") : "尚未开始";
+    $("detail-review").textContent = humanBlocked ? "人工异议待处理" : data.review ? (data.review.passed ? (hasQualityChecks ? "自动验收通过" : "原有审查通过") : "存在待解决问题") : "尚未开始";
     $("detail-review").title = data.review?.note || "";
     $("quality-checks").replaceChildren();
-    const checks = [["completeness_passed", "答案完整性"], ["relevance_passed", "证据相关性"], ["format_passed", "输出格式"], ["truncation_passed", "输出完整结束"], ["support_passed", "事实支持"]];
+    const checks = [["completeness_passed", "答案完整性"], ["relevance_passed", "证据相关性"], ["format_passed", "输出格式"], ["truncation_passed", "输出完整结束"], ["support_passed", "事实支持"], ["evidence_review_passed", "证据审阅检查"]];
     checks.forEach(([key, label]) => {
       if (typeof data.review?.[key] !== "boolean") return;
       const passed = data.review[key];
       $("quality-checks").append(el("span", `quality-check ${passed ? "passed" : "failed"}`, `${passed ? "✓" : "!"} ${label}${passed ? "通过" : "未通过"}`));
     });
     $("quality-checks").hidden = !$("quality-checks").childElementCount;
-    $("review-issues").hidden = !array(data.review?.issues).length;
+    $("review-issues").hidden = !array(data.review?.issues).length && !humanBlocked;
     $("review-issues").replaceChildren();
     if (array(data.review?.issues).length) {
       const issues = el("ul");
       data.review.issues.forEach((issue) => issues.append(el("li", "", issue)));
       $("review-issues").append(issues);
     }
+    if (humanBlocked) $("review-issues").append(el("p", "", "人工对已引用证据提出疑问或否定，报告当前按草稿处理；上方仍保留原自动验收记录。"));
     $("evidence-count").textContent = evidence.length;
     $("cancel-run").hidden = !run || !["queued", "running", "awaiting_approval"].includes(status);
     $("resume-run").hidden = status !== "failed";
@@ -507,18 +542,26 @@
       exportButton.removeAttribute("href");
       exportButton.removeAttribute("download");
     }
-    $("copy-report").disabled = !report;
+    $("copy-report").disabled = !report || state.copyingReport;
     $("copy-report").setAttribute("aria-label", draft ? "复制 Markdown 草稿" : "复制 Markdown 报告");
     const notice = $("report-notice");
     notice.replaceChildren();
-    notice.hidden = !report || (!draft && !["unverified", "insufficient_evidence"].includes(answerStatus));
+    notice.hidden = !report || (!draft && !reviewCounts.total && !["unverified", "insufficient_evidence"].includes(answerStatus));
     notice.className = `report-notice${draft ? " draft" : ""}`;
-    if (draft) {
+    if (humanBlocked) {
+      notice.append(el("strong", "", "人工审阅发现问题 · 报告暂按草稿处理"), el("p", "", "已引用证据存在人工疑问或否定，请在证据库查看理由。原自动审查结论保留，导出内容会包含最新审阅记录。"));
+    }
+    else if (draft) {
       const rejected = data.review?.passed === false || status === "failed";
       notice.append(el("strong", "", rejected ? "未通过验收的草稿" : "等待验收的草稿"), el("p", "", rejected ? "这份内容仍有未解决的问题，不能视为完整答案。具体原因见质量审查。" : "答案正在审查，验收通过后才会标记为完成。"));
     }
-    else if (answerStatus === "unverified") notice.append(el("strong", "", "答案已整理，来源待核验"), el("p", "", "以下内容依据当前相关资料整理；尚未独立核验不等于没有可供参考的答案。"));
     else if (answerStatus === "insufficient_evidence") notice.append(el("strong", "", "相关证据不足"), el("p", "", "现有资料不足以回答问题。请按报告中的缺口补充相关资料后重新研究。"));
+    else if (reviewCounts.total && reviewCounts.pending === 0) {
+      notice.classList.add("reviewed");
+      notice.append(el("strong", "", "证据审阅已完成，事实尚未独立核验"), el("p", "", `${reviewCounts.reviewed} 条证据已有审阅记录${reviewCounts.human ? `，其中 ${reviewCounts.human} 条经人工审阅` : ""}。审阅判断原文是否支持报告引用，不等于来源内容已被独立证实。${reviewCounts.issues ? `仍有 ${reviewCounts.issues} 条存在疑问，请查看证据库。` : ""}`));
+    }
+    else if (reviewCounts.rules && !reviewCounts.reviewed) notice.append(el("strong", "", "规则检查已完成，待语义审阅"), el("p", "", "离线演示仅执行规则检查。你可以在证据库逐条人工审阅；模型驱动的新研究会自动加入 Agent 审阅。事实仍需结合原始来源核验。"));
+    else notice.append(el("strong", "", reviewCounts.reviewed ? "证据审阅进行中，事实尚未独立核验" : "答案已整理，证据待审阅"), el("p", "", reviewCounts.total ? `${reviewCounts.reviewed} 条已审阅，${reviewCounts.pending} 条待审阅。打开证据库可查看依据并添加人工审阅；历史报告不会自动标记为已审阅。` : "当前答案尚无证据审阅记录；来源和结论也尚未独立核验。"));
     renderWorkflow();
     renderPlan(plan);
     renderPlan(status === "awaiting_approval" ? plan : null, $("approval-plan"));
@@ -589,12 +632,25 @@
 
   function renderEvidence(evidence) {
     const container = $("evidence-list");
+    const openDetails = new Set([...container.querySelectorAll("details[open][data-review-id]")].map((node) => node.dataset.reviewId));
     container.replaceChildren();
+    const summary = $("evidence-review-summary");
+    summary.replaceChildren();
+    summary.hidden = !evidence.length;
     if (!evidence.length) {
       container.append(emptyState("还没有收集到证据", "执行检索后，原文片段、来源与检索分数会显示在这里。", "book"));
       return;
     }
+    const counts = evidenceReviewCounts();
+    const summaryStats = el("div", "review-summary-stats");
+    [["已审阅", counts.reviewed], ["待审阅", counts.pending], ["规则已检查", counts.rules], ["存在疑问", counts.issues]].forEach(([label, value]) => {
+      const stat = el("span", `review-summary-stat${label === "存在疑问" && value ? " has-issues" : ""}`);
+      stat.append(el("strong", "", value), document.createTextNode(label));
+      summaryStats.append(stat);
+    });
+    summary.append(summaryStats, el("p", "", "审阅判断证据是否支持报告中的引用。Agent 审阅、人工审阅与规则检查分别记录；已审阅不代表事实已独立核验。"));
     evidence.forEach((item) => {
+      const review = evidenceReview(item);
       const card = el("article", "evidence-card");
       card.id = evidenceDomId(item.id);
       const header = el("div", "evidence-card-header");
@@ -605,6 +661,12 @@
         header.append(score);
       }
       card.append(header);
+      const badges = el("div", "evidence-review-badges");
+      const reviewedBy = review.human ? "人工已审阅" : review.agent ? "Agent 已审阅" : review.automatic?.method === "rules" ? "规则已检查" : "待审阅";
+      badges.append(el("span", `review-badge ${review.effective ? "reviewed" : "pending"}`, reviewedBy));
+      if (review.effective) badges.append(el("span", `review-badge verdict-${review.effective.verdict}`, evidenceVerdicts[review.effective.verdict]));
+      else if (review.automatic?.method === "rules") badges.append(el("span", "review-badge pending", "待语义审阅"));
+      card.append(badges);
       const content = String(item.text || "");
       card.append(el("p", "evidence-text", content.slice(0, 650)));
       if (content.length > 650) {
@@ -615,8 +677,156 @@
       const source = el("div", "evidence-source");
       source.append(icon("link"), externalLink(item.source || "本地知识库", item.source));
       card.append(source);
+      if (review.automatic || review.human) {
+        const details = el("details", "evidence-review-details");
+        details.dataset.reviewId = String(item.id);
+        details.open = openDetails.has(String(item.id));
+        details.append(el("summary", "", "审阅依据与记录"));
+        if (review.automatic) details.append(renderReviewRecord(review.automatic));
+        if (review.human) details.append(renderReviewRecord(review.human));
+        const audit = el("button", "button button-small button-secondary", "查看审阅变更轨迹");
+        audit.type = "button";
+        audit.addEventListener("click", () => switchTab("trace", true));
+        details.append(audit);
+        card.append(details);
+      }
+      if (["completed", "failed", "cancelled"].includes(state.run?.status) && state.run?.state?.report) card.append(renderManualReview(item, review));
+      else card.append(el("p", "evidence-review-help", "研究结束并生成报告后，可以在这里添加人工审阅。"));
       container.append(card);
     });
+  }
+
+  function renderReviewRecord(record) {
+    const block = el("div", "evidence-review-record");
+    const method = record.method === "human" ? "人工审阅" : record.method === "agent" ? "Agent 审阅" : "规则检查";
+    const heading = el("div", "review-record-heading");
+    heading.append(el("strong", "", method), el("span", "", evidenceVerdicts[record.verdict] || "未记录结论"));
+    if (record.reviewed_at) heading.append(el("time", "", shortDate(record.reviewed_at)));
+    block.append(heading, el("p", "review-reason", record.reason || "未记录审阅理由。"));
+    const meta = [record.model ? `模型：${record.model}` : "", typeof record.relevant === "boolean" ? `与问题${record.relevant ? "相关" : "不相关"}` : ""].filter(Boolean);
+    if (meta.length) block.append(el("p", "review-record-meta", meta.join(" · ")));
+    return block;
+  }
+
+  function renderManualReview(item, review) {
+    const runId = state.run.id;
+    const key = JSON.stringify([runId, String(item.id)]);
+    let draft = state.reviewDrafts.get(key);
+    if (!draft) {
+      draft = { verdict: review.human?.verdict || "supported", reason: review.human?.reason || "", fingerprint: review.record.fingerprint || "", open: false, error: "" };
+      state.reviewDrafts.set(key, draft);
+    }
+    const panel = el("details", "manual-review");
+    panel.open = draft.open;
+    panel.append(el("summary", "", review.human ? "更新人工审阅" : "添加人工审阅"));
+    panel.addEventListener("toggle", () => { draft.open = panel.open; });
+    const form = el("form", "manual-review-form");
+    form.dataset.evidenceId = String(item.id);
+    const prefix = `${evidenceDomId(item.id)}-review`;
+    const verdictLabel = el("label", "", "审阅结论");
+    verdictLabel.htmlFor = `${prefix}-verdict`;
+    const verdict = el("select");
+    verdict.id = verdictLabel.htmlFor;
+    ["supported", "uncertain", "contradicted"].forEach((value) => {
+      const option = el("option", "", evidenceVerdicts[value]);
+      option.value = value;
+      verdict.append(option);
+    });
+    verdict.value = draft.verdict;
+    verdict.addEventListener("change", () => { draft.verdict = verdict.value; });
+    const reasonLabel = el("label", "", "审阅理由（必填）");
+    reasonLabel.htmlFor = `${prefix}-reason`;
+    const reason = el("textarea");
+    reason.id = reasonLabel.htmlFor;
+    reason.rows = 3;
+    reason.maxLength = 2000;
+    reason.required = true;
+    reason.placeholder = "说明你核对了什么，以及这段原文为何支持、无法支持或需要进一步确认报告中的引用。";
+    reason.value = draft.reason;
+    reason.addEventListener("input", () => { draft.reason = reason.value; });
+    const note = el("p", "evidence-review-help", "人工判断会作为当前结论，Agent 原始审阅仍会保留。对报告已引用的证据选择“有疑问”或“不支持引用”，报告将按草稿处理。");
+    note.id = `${prefix}-help`;
+    reason.setAttribute("aria-describedby", note.id);
+    const error = el("p", "form-error", draft.error);
+    error.setAttribute("role", "alert");
+    error.hidden = !draft.error;
+    const actions = el("div", "manual-review-actions");
+    const button = el("button", "button button-small button-primary", state.reviewSaving.has(runId) ? "正在保存…" : "保存人工审阅");
+    button.type = "submit";
+    const hasFingerprint = /^[a-f0-9]{64}$/i.test(review.record.fingerprint || "");
+    const stale = draft.fingerprint !== review.record.fingerprint;
+    button.disabled = state.reviewSaving.has(runId) || !hasFingerprint || stale;
+    verdict.disabled = reason.disabled = state.reviewSaving.has(runId);
+    actions.append(button);
+    if (stale && hasFingerprint) {
+      const reload = el("button", "button button-small button-secondary", "按当前证据重新审阅");
+      reload.type = "button";
+      reload.disabled = state.reviewSaving.has(runId);
+      reload.addEventListener("click", () => {
+        draft.fingerprint = review.record.fingerprint;
+        draft.error = "";
+        draft.open = true;
+        renderEvidence(array(state.run?.state?.evidence));
+      });
+      actions.append(reload);
+      form.append(el("p", "review-stale-note", "报告或证据已经更新。请先查看当前内容，确认后重新审阅；你填写的理由已保留。"));
+    } else if (!hasFingerprint) form.append(el("p", "review-stale-note", "尚未读取到此证据的审阅版本，请重新打开历史记录后重试。"));
+    form.append(verdictLabel, verdict, reasonLabel, reason, note, error, actions);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (state.reviewSaving.has(runId) || !hasFingerprint || stale) return;
+      draft.reason = reason.value;
+      draft.verdict = verdict.value;
+      draft.open = true;
+      if (!draft.reason.trim()) {
+        draft.error = "请填写审阅理由，说明当前判断的依据。";
+        error.textContent = draft.error;
+        error.hidden = false;
+        reason.focus();
+        return;
+      }
+      saveEvidenceReview(runId, item.id, key, draft);
+    });
+    panel.append(form);
+    return panel;
+  }
+
+  async function saveEvidenceReview(runId, evidenceId, key, draft) {
+    const selection = state.selection;
+    state.reviewSaving.add(runId);
+    draft.error = "";
+    renderEvidence(array(state.run?.state?.evidence));
+    try {
+      const run = await api(`/api/runs/${encodeURIComponent(runId)}/evidence/${encodeURIComponent(evidenceId)}/review`, {
+        method: "PUT", body: JSON.stringify({ fingerprint: draft.fingerprint, verdict: draft.verdict, reason: draft.reason.trim() }),
+      });
+      state.reviewDrafts.delete(key);
+      const index = state.runs.findIndex((item) => item.id === runId);
+      if (index >= 0) state.runs[index] = run;
+      if (state.run?.id === runId && selection === state.selection) {
+        state.run = run;
+        renderRun();
+        renderRecentRuns();
+        toast("人工审阅已保存，原始自动审阅记录仍可查看。");
+        try {
+          const events = await api(`/api/runs/${encodeURIComponent(runId)}/trace`);
+          if (state.run?.id === runId && selection === state.selection) { state.events = array(events); renderTrace(); }
+        } catch { /* The saved review is durable even when refreshing the trace fails. */ }
+      }
+    } catch (error) {
+      draft.error = error.message;
+      if (error.status === 409) {
+        draft.error += " 你的理由已保留，请核对最新内容后重试。";
+        try {
+          const latest = await api(`/api/runs/${encodeURIComponent(runId)}`);
+          if (state.run?.id === runId && selection === state.selection) state.run = latest;
+        } catch { /* Keep the entered note and the original failure if refresh is unavailable. */ }
+      }
+    } finally {
+      state.reviewSaving.delete(runId);
+      if (state.run?.id === runId && selection === state.selection) renderRun();
+      else if (state.run?.id === runId) renderEvidence(array(state.run?.state?.evidence));
+    }
   }
 
   function renderTrace() {
@@ -952,10 +1162,30 @@
     $("cancel-run").addEventListener("click", () => runAction("cancel", null, ["cancel-run"]));
     $("resume-run").addEventListener("click", () => runAction("resume", null, ["resume-run"]));
     $("copy-report").addEventListener("click", async () => {
-      const report = state.run?.state?.report;
-      if (!report) return;
-      try { await navigator.clipboard.writeText(report); toast(isDraft() ? "Markdown 草稿已复制。" : "Markdown 报告已复制。"); }
-      catch { toast("浏览器未允许写入剪贴板，请使用“导出报告”保存。", true); }
+      const runId = state.run?.id;
+      const selection = state.selection;
+      if (!state.run?.state?.report || state.copyingReport) return;
+      state.copyingReport = true;
+      $("copy-report").disabled = true;
+      let report;
+      try {
+        const response = await fetch(`/api/runs/${encodeURIComponent(runId)}/report`, { credentials: "same-origin", cache: "no-store" });
+        if (!response.ok) throw new Error(`获取最新报告失败（HTTP ${response.status}），请重试。`);
+        report = await response.text();
+        if (!report.trim()) throw new Error("最新报告内容为空，请刷新任务后重试。");
+      } catch (error) {
+        if (state.run?.id === runId && selection === state.selection) toast(error instanceof TypeError ? "无法获取最新报告，请确认本地服务正在运行后重试。" : error.message, true);
+      }
+      try {
+        if (report && state.run?.id === runId && selection === state.selection) {
+          await navigator.clipboard.writeText(report);
+          toast("Markdown 已复制，包含最新审阅记录。");
+        }
+      } catch { toast("浏览器未允许写入剪贴板，请使用“导出报告”保存。", true); }
+      finally {
+        state.copyingReport = false;
+        $("copy-report").disabled = !state.run?.state?.report;
+      }
     });
     $("document-form").addEventListener("submit", addDocument);
     $("document-file").addEventListener("change", importFile);

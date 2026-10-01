@@ -14,8 +14,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from . import __version__
 from .bootstrap import seed_demo_once
 from .config import Settings
+from .evidence_review import export_review_appendix, human_review_blocked, present_reviews, review_summary
 from .knowledge import KnowledgeBase
-from .store import Store
+from .store import EvidenceReviewError, Store
 from .workflow import Engine
 
 
@@ -34,6 +35,12 @@ class RunInput(StrictModel):
 class ApprovalInput(StrictModel):
     approved: bool
     feedback: str = Field(default="", max_length=2000)
+
+
+class EvidenceReviewInput(StrictModel):
+    fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    verdict: Literal["supported", "uncertain", "contradicted"]
+    reason: str = Field(min_length=1, max_length=2000)
 
 
 class DocumentInput(StrictModel):
@@ -84,11 +91,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
         return response
 
+    def present_run(run):
+        state = run["state"]
+        state["evidence_reviews"] = present_reviews(run["question"], state)
+        state["human_review_blocked"] = human_review_blocked(run["question"], state)
+        return run
+
     def get_run(run_id):
         run = store.get_run(run_id)
         if not run:
             raise HTTPException(404, "任务不存在")
-        return run
+        return present_run(run)
 
     @app.get("/api/health")
     def health():
@@ -99,7 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/runs")
     def list_runs():
-        return store.list_runs()
+        return [present_run(run) for run in store.list_runs()]
 
     @app.post("/api/runs", status_code=201)
     def create_run(body: RunInput, tasks: BackgroundTasks):
@@ -111,11 +124,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         question, mode = params.pop("question"), params.pop("mode")
         run = store.create_run(question, mode, params)
         tasks.add_task(engine.execute, run["id"])
-        return run
+        return present_run(run)
 
     @app.get("/api/runs/{run_id}")
     def read_run(run_id: str):
         return get_run(run_id)
+
+    @app.put("/api/runs/{run_id}/evidence/{evidence_id}/review")
+    def review_evidence(run_id: str, evidence_id: str, body: EvidenceReviewInput):
+        try:
+            run = store.review_evidence(run_id, evidence_id, body.fingerprint, body.verdict, body.reason)
+        except EvidenceReviewError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from None
+        return present_run(run)
 
     @app.post("/api/runs/{run_id}/approve")
     def approve_run(run_id: str, body: ApprovalInput, tasks: BackgroundTasks):
@@ -179,10 +200,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run = get_run(run_id)
         if not run["state"].get("report"):
             raise HTTPException(409, "报告尚未生成")
-        draft = run["state"].get("report_draft") or run["state"].get("review", {}).get("passed") is False
+        blocked = run["state"]["human_review_blocked"]
+        draft = (blocked or run["state"].get("report_draft")
+                 or run["state"].get("review", {}).get("passed") is False)
         content = run["state"]["report"]
+        summary = review_summary(run["question"], run["state"])
+        if summary["total"]:
+            content = (f"> 当前证据审阅：人工已审阅 {summary['human']} 条，Agent 已审阅 {summary['agent']} 条，"
+                       f"规则已检查 {summary['rules']} 条；待语义审阅 {summary['pending'] + summary['rules']} 条。"
+                       "已审阅不等于已独立核验事实。\n\n" + content)
+        if blocked:
+            content = "> 人工审阅提示：报告引用的证据存在疑问或不支持结论，请修订报告并重新检查。\n\n" + content
         if draft and "未通过验收的草稿" not in content:
             content = "> 未通过验收的草稿：内容尚未通过全部质量检查。\n\n" + content
+        content += export_review_appendix(run["question"], run["state"])
         suffix = "-draft" if draft else ""
         return Response(content, media_type="text/markdown; charset=utf-8",
                         headers={"Content-Disposition": f'attachment; filename="evidenceforge-{run_id[:8]}{suffix}.md"'})

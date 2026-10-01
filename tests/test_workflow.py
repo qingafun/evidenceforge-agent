@@ -18,6 +18,20 @@ PASS_REVIEW = {"passed": True, "completeness_passed": True, "relevance_passed": 
                "support_passed": True, "issues": [], "warnings": []}
 
 
+def supported_evidence_review(messages):
+    """The extra model pass must actually cover the supplied, cited evidence."""
+    payload = json.loads(messages[-1]["content"])
+    assert payload["question"]
+    assert payload["report"]
+    assert payload["evidence"]
+    cited = set(payload["cited_ids"])
+    return json.dumps({"reviews": [
+        {"evidence_id": item["id"], "verdict": "supported" if item["id"] in cited else "not_used",
+         "relevant": True, "reason": "The supplied source supports the attributed statement in this fixture."}
+        for item in payload["evidence"]
+    ]})
+
+
 @pytest.fixture
 def components(tmp_path):
     settings = Settings(data_dir=tmp_path, api_key="", tavily_api_key="", _env_file=None)
@@ -173,6 +187,8 @@ def test_live_autonomous_tool_loop_with_mock_http_provider(components, monkeypat
                                   f"| Local state | Persist approval state locally. [{selected_id}] |")
         elif "Role: Evidence selector" in role:
             message["content"] = json.dumps({"relevant_ids": [selected_id]})
+        elif "Role: Evidence reviewer" in role:
+            message["content"] = supported_evidence_review(messages)
         elif "Role: Critic" in role:
             message["content"] = json.dumps(PASS_REVIEW)
         else:
@@ -191,12 +207,12 @@ def test_live_autonomous_tool_loop_with_mock_http_provider(components, monkeypat
     assert record["status"] == "completed", record.get("error")
     assert record["state"]["review"]["passed"]
     assert record["state"]["metrics"]["tool_calls"] == 3
-    assert record["state"]["metrics"]["llm_calls"] == 7
-    assert record["state"]["metrics"]["prompt_tokens"] == 280
-    assert record["state"]["metrics"]["completion_tokens"] == 140
+    assert record["state"]["metrics"]["llm_calls"] == 8
+    assert record["state"]["metrics"]["prompt_tokens"] == 320
+    assert record["state"]["metrics"]["completion_tokens"] == 160
     tools = [event["data"]["tool"] for event in store.events(run["id"]) if event["kind"] == "tool"]
     assert tools == ["search_knowledge", "calculator", "read_source"]
-    assert len(requests) == 7
+    assert len(requests) == 8
     assert "PRIVATE_REASONING" not in json.dumps(store.events(run["id"]))
     assert "PRIVATE_REASONING" not in json.dumps(record)
 
@@ -226,6 +242,8 @@ def test_failed_writer_resumes_from_checkpoint_without_replaying_research(compon
             message["content"] = f"Checkpoint state can be restored. [{selected_id}]"
         elif "Role: Evidence selector" in role:
             message["content"] = json.dumps({"relevant_ids": [selected_id]})
+        elif "Role: Evidence reviewer" in role:
+            message["content"] = supported_evidence_review(messages)
         elif "Role: Critic" in role:
             message["content"] = json.dumps(PASS_REVIEW)
         return httpx.Response(200, json={"choices": [{"message": message}],
@@ -247,7 +265,7 @@ def test_failed_writer_resumes_from_checkpoint_without_replaying_research(compon
     restored = store.get_run(run["id"])
     assert restored["status"] == "completed", restored.get("error")
     assert restored["error"] is None
-    assert restored["state"]["metrics"]["llm_calls"] == 7
+    assert restored["state"]["metrics"]["llm_calls"] == 8
     assert restored["state"]["metrics"]["tool_calls"] == 1
     trace = store.events(run["id"])
     assert len([event for event in trace if event["node"] == "research" and event["kind"] == "start"]) == 1
@@ -329,6 +347,40 @@ def test_pre_upgrade_checkpoint_is_curated_before_answering(components, pending_
     assert result["state"]["metrics"]["tool_calls"] == 0
 
 
+def test_pre_review_upgrade_completed_checkpoint_requires_evidence_review_on_resume(components, monkeypatch):
+    settings, store, knowledge, engine = components
+    run = create_run(store, require_approval=False)
+    evidence = knowledge.search("LangGraph")
+    report = f"LangGraph checkpoints save agent state for approval recovery. [{evidence[0]['id']}]"
+    legacy = StateGraph(RunState)
+    legacy.add_node("finalize", lambda _: {
+        "evidence": evidence, "revision": 0, "report": report,
+        "review": {"passed": True}, "report_draft": False, "answer_status": "unverified",
+        "answer_contract": {"task_type": "factual", "output_format": "direct_answer", "required_items": []},
+    })
+    legacy.add_edge(START, "finalize")
+    legacy.add_edge("finalize", END)
+    config = {"configurable": {"thread_id": run["id"]}}
+    with SqliteSaver.from_conn_string(str(settings.data_dir / "checkpoints.sqlite")) as saver:
+        graph = legacy.compile(checkpointer=saver)
+        state = graph.invoke(run["state"], config)
+        assert not graph.get_state(config).next
+        assert "evidence_reviews" not in state
+    store.update_run(run["id"], status="failed", state=state)
+    monkeypatch.setattr(engine.registry, "execute", lambda *_: pytest.fail("Upgrade replayed research"))
+
+    engine.execute(run["id"], resume=True)
+
+    restored = store.get_run(run["id"])
+    assert restored["status"] == "completed", restored.get("error")
+    assert restored["state"]["review"]["evidence_review_passed"]
+    assert restored["state"]["report_body"] == report
+    assert all(item["automatic"]["method"] == "rules"
+               for item in restored["state"]["evidence_reviews"].values())
+    assert len([event for event in store.events(run["id"])
+                if event["node"] == "evidence_review" and event["kind"] == "complete"]) == 1
+
+
 @pytest.mark.parametrize("failure", ["missing_row", "cut_off", "abstain", "critic_blocking_issue",
                                      "missing_critic_checks", "null_issues", "null_warnings", "provider_cutoff"])
 def test_live_answer_quality_is_mandatory_even_when_critic_says_passed(components, monkeypatch, failure):
@@ -355,6 +407,8 @@ def test_live_answer_quality_is_mandatory_even_when_critic_says_passed(component
                     "name": "search_knowledge", "arguments": '{"query":"原神"}'}}]
         elif "Role: Evidence selector" in role:
             message["content"] = json.dumps({"relevant_ids": [evidence_id]})
+        elif "Role: Evidence reviewer" in role:
+            message["content"] = supported_evidence_review(messages)
         elif "Role: Analyst" in role:
             writer_calls.append(payload)
             rows = [("蒙德", "德国等欧洲文化"), ("璃月", "中国文化"), ("稻妻", "日本文化")]
