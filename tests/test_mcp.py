@@ -5,7 +5,6 @@ import json
 import os
 import sys
 from datetime import timedelta
-from pathlib import Path
 
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
@@ -20,7 +19,7 @@ def test_mcp_stdio_handshake_lists_and_calls_read_only_tools(tmp_path):
         parameters = StdioServerParameters(
             command=sys.executable,
             args=["-m", "evidenceforge.mcp_server"],
-            cwd=Path(__file__).resolve().parents[1],
+            cwd=tmp_path,
             env={**os.environ, "EF_DATA_DIR": str(tmp_path), "EF_API_KEY": "", "EF_TAVILY_API_KEY": ""},
         )
         async with stdio_client(parameters) as (reader, writer):
@@ -31,6 +30,19 @@ def test_mcp_stdio_handshake_lists_and_calls_read_only_tools(tmp_path):
                 assert {tool.name for tool in tools.tools} == {
                     "search_knowledge", "read_source", "list_research_runs",
                 }
+                expected_hints = {
+                    "readOnlyHint": True,
+                    "destructiveHint": False,
+                    "idempotentHint": True,
+                    "openWorldHint": False,
+                }
+                for tool in tools.tools:
+                    assert tool.annotations is not None, tool.name
+                    # Defaults alone must not pass: the server must advertise every hint.
+                    advertised_hints = tool.annotations.model_dump(exclude_unset=True)
+                    for name, expected in expected_hints.items():
+                        assert name in advertised_hints, (tool.name, name)
+                        assert advertised_hints[name] is expected, (tool.name, name)
                 result = await session.call_tool("search_knowledge", {"query": "LangGraph checkpoint", "limit": 2})
                 assert not result.isError
                 # FastMCP serializes list return values as one text block per item.

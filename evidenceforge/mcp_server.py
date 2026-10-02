@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from .bootstrap import seed_demo_once
 from .config import Settings
@@ -19,19 +20,25 @@ def build_server(settings: Settings | None = None):
     store = Store(settings.data_dir / "app.sqlite")
     server = FastMCP("EvidenceForge")
 
-    @server.tool()
+    @server.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False,
+    ))
     def search_knowledge(query: str, limit: int = 5) -> list[dict]:
         """Retrieve untrusted evidence excerpts from the local technical knowledge base."""
         if not 1 <= limit <= 10 or not 1 <= len(query) <= 1000:
             raise ValueError("Invalid query or limit")
         return kb.search(query, limit=limit)
 
-    @server.tool()
+    @server.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False,
+    ))
     def read_source(chunk_id: str) -> dict:
         """Read a cited evidence chunk with its exact text and provenance."""
         return kb.read_chunk(chunk_id) or {"error": "Source not found"}
 
-    @server.tool()
+    @server.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False,
+    ))
     def list_research_runs() -> list[dict]:
         """List local research task summaries without exposing internal model prompts."""
         return [{k: r[k] for k in ("id", "question", "status", "mode", "created_at")} for r in store.list_runs()]
